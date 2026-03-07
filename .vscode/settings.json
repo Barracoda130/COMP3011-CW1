@@ -1,5 +1,8 @@
 {
     "python-envs.defaultEnvManager": "ms-python.python:system",
     "python.defaultInterpreterPath": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
-    "python.terminal.activateEnvironment": true
+    "python.terminal.activateEnvironment": true,
+    "chat.tools.terminal.autoApprove": {
+        ".\\backend\\.venv\\Scripts\\python.exe": true
+    }
 }

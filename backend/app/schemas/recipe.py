@@ -7,6 +7,7 @@ class RecipeBase(BaseModel):
     prep_minutes: int = Field(ge=1, le=600)
     calories: int | None = Field(default=None, ge=0)
     tags: list[str] = Field(default_factory=list)
+    description: str | None = Field(default=None, max_length=2000)
 
 
 class RecipeCreate(RecipeBase):
@@ -23,3 +24,7 @@ class RecipeUpdate(BaseModel):
 
 class RecipeRead(RecipeBase):
     id: int
+    owner_id: int
+    average_rating: float | None = None
+
+    model_config = {"from_attributes": True}
