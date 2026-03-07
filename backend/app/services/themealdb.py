@@ -18,6 +18,14 @@ def _normalize_full_meal(meal: dict[str, Any]) -> dict[str, Any]:
     if meal.get("strTags"):
         tags = [tag.strip() for tag in meal["strTags"].split(",") if tag.strip()]
 
+    key_ingredients = []
+    for idx in range(1, 7):
+        ingredient = (meal.get(f"strIngredient{idx}") or "").strip()
+        if ingredient:
+            key_ingredients.append(ingredient)
+        if len(key_ingredients) >= 4:
+            break
+
     return {
         "id": f"themealdb-{meal.get('idMeal')}",
         "external_id": meal.get("idMeal"),
@@ -29,6 +37,8 @@ def _normalize_full_meal(meal: dict[str, Any]) -> dict[str, Any]:
         "calories": None,
         "description": meal.get("strInstructions") or meal.get("strCategory"),
         "tags": tags,
+        "category": meal.get("strCategory") or None,
+        "key_ingredients": key_ingredients,
         "average_rating": None,
         "owner_id": None,
     }
@@ -46,6 +56,8 @@ def _normalize_filter_meal(meal: dict[str, Any], cuisine_hint: str | None = None
         "calories": None,
         "description": None,
         "tags": [],
+        "category": None,
+        "key_ingredients": [],
         "average_rating": None,
         "owner_id": None,
     }

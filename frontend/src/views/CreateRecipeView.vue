@@ -26,7 +26,7 @@ async function createRecipe() {
   try {
     const payload = {
       title: form.value.title,
-      cuisine: form.value.cuisine,
+      cuisine: form.value.cuisine.trim() || null,
       prep_minutes: Number(form.value.prep_minutes),
       calories: form.value.calories ? Number(form.value.calories) : null,
       tags: form.value.tags
@@ -61,14 +61,13 @@ onUnmounted(() => {
   <section class="grid">
     <article class="card stack">
       <h2>Create Recipe</h2>
-      <p class="small">Requires login token. New recipes are saved in your local database.</p>
       <div class="summary">
         <RouterLink class="muted-link" to="/recipes">Back to Discover Recipes</RouterLink>
       </div>
 
       <label>Title</label>
       <input v-model="form.title" type="text" />
-      <label>Cuisine</label>
+      <label>Cuisine (optional)</label>
       <input v-model="form.cuisine" type="text" />
       <label>Prep Minutes</label>
       <input v-model="form.prep_minutes" type="number" min="1" />
@@ -82,7 +81,6 @@ onUnmounted(() => {
 
       <p v-if="error" class="error">{{ error }}</p>
       <p v-if="successMessage" class="success">{{ successMessage }}</p>
-      <pre v-if="created">{{ JSON.stringify(created, null, 2) }}</pre>
     </article>
   </section>
 </template>

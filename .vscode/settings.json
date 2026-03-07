@@ -4,6 +4,7 @@
     "python.terminal.activateEnvironment": true,
     "chat.tools.terminal.autoApprove": {
         ".\\backend\\.venv\\Scripts\\python.exe": true,
-        "npm.cmd": true
+        "npm.cmd": true,
+        ".\\.venv\\Scripts\\python.exe": true
     }
 }

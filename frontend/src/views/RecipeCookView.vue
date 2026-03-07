@@ -12,6 +12,16 @@ const recipe = ref(null);
 const error = ref("");
 const ingredientChecks = ref({});
 
+function normalizeHeading(rawHeading) {
+  const match = rawHeading.match(/(step|task)\s*(\d+)/i);
+  if (!match) {
+    return rawHeading.trim().replace(/[:.-]+$/, "");
+  }
+
+  const kind = match[1][0].toUpperCase() + match[1].slice(1).toLowerCase();
+  return `${kind} ${match[2]}`;
+}
+
 function parseInstructionSteps(instructions) {
   if (!instructions || !instructions.trim()) {
     return [];
@@ -25,16 +35,25 @@ function parseInstructionSteps(instructions) {
     const steps = [];
     const firstMatchIndex = matches[0].index;
     const intro = text.slice(0, firstMatchIndex).trim();
-    if (intro) {
-      steps.push(intro);
-    }
+    let introAppended = false;
 
     for (let i = 0; i < matches.length; i += 1) {
       const start = matches[i].index;
+      const markerText = matches[i][0];
+      const contentStart = start + markerText.length;
       const end = i + 1 < matches.length ? matches[i + 1].index : text.length;
-      const chunk = text.slice(start, end).trim();
-      if (chunk) {
-        steps.push(chunk.replace(/\s+/g, " "));
+      let body = text.slice(contentStart, end).trim().replace(/\s+/g, " ");
+
+      if (!introAppended && intro) {
+        body = `${intro} ${body}`.trim();
+        introAppended = true;
+      }
+
+      if (body) {
+        steps.push({
+          heading: normalizeHeading(markerText),
+          text: body
+        });
       }
     }
 
@@ -47,13 +66,20 @@ function parseInstructionSteps(instructions) {
     .filter(Boolean);
 
   if (lineSplit.length > 1) {
-    return lineSplit;
+    return lineSplit.map((line, index) => ({
+      heading: `Step ${index + 1}`,
+      text: line
+    }));
   }
 
   return text
     .split(/(?<=[.!?])\s+/)
     .map((sentence) => sentence.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .map((sentence, index) => ({
+      heading: `Step ${index + 1}`,
+      text: sentence
+    }));
 }
 
 const instructionSteps = computed(() => parseInstructionSteps(recipe.value?.instructions || ""));
@@ -121,9 +147,12 @@ watch(() => `${props.source}:${props.id}`, loadCookRecipe);
         <article class="card">
           <h3>How to cook</h3>
           <p class="small" v-if="recipe.description">{{ recipe.description }}</p>
-          <ol v-if="instructionSteps.length" class="instruction-list">
-            <li v-for="(step, idx) in instructionSteps" :key="idx">{{ step }}</li>
-          </ol>
+          <div v-if="instructionSteps.length" class="instruction-list">
+            <article v-for="(step, idx) in instructionSteps" :key="idx" class="instruction-card">
+              <h4>{{ step.heading }}</h4>
+              <p>{{ step.text }}</p>
+            </article>
+          </div>
           <p v-else class="small">No instructions available.</p>
         </article>
       </section>

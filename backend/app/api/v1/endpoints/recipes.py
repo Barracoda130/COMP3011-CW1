@@ -24,6 +24,13 @@ from app.services.themealdb import get_themealdb_recipe_by_id, search_themealdb_
 router = APIRouter()
 
 
+def _normalized_cuisine(value: str | None) -> str:
+    if value is None:
+        return "Unknown"
+    normalized = value.strip()
+    return normalized or "Unknown"
+
+
 @router.get("", response_model=list[RecipeRead])
 def list_recipes(
     skip: Annotated[int, Query(ge=0)] = 0,
@@ -53,7 +60,7 @@ def discover_recipes(
             id=recipe.id,
             source="local",
             title=recipe.title,
-            cuisine=recipe.cuisine,
+            cuisine=_normalized_cuisine(recipe.cuisine),
             image_url=None,
             prep_minutes=recipe.prep_minutes,
             calories=recipe.calories,
@@ -61,6 +68,8 @@ def discover_recipes(
             description=recipe.description,
             average_rating=recipe.average_rating,
             owner_id=recipe.owner_id,
+            category=None,
+            key_ingredients=[],
         )
         for recipe in local_recipes
     ]
@@ -97,7 +106,7 @@ def get_recipe_for_cooking(
             id=recipe.id,
             source="local",
             title=recipe.title,
-            cuisine=recipe.cuisine,
+            cuisine=_normalized_cuisine(recipe.cuisine),
             description=recipe.description,
             instructions=recipe.description,
             tags=recipe.tags,
@@ -121,7 +130,10 @@ def create_recipe(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Recipe:
-    recipe = Recipe(owner_id=current_user.id, **payload.model_dump())
+    payload_data = payload.model_dump()
+    payload_data["cuisine"] = _normalized_cuisine(payload_data.get("cuisine"))
+
+    recipe = Recipe(owner_id=current_user.id, **payload_data)
     db.add(recipe)
     db.commit()
     db.refresh(recipe)
@@ -150,6 +162,9 @@ def update_recipe(
         raise HTTPException(status_code=403, detail="Only the recipe owner can update this recipe")
 
     updated_data = payload.model_dump(exclude_unset=True)
+    if "cuisine" in updated_data:
+        updated_data["cuisine"] = _normalized_cuisine(updated_data.get("cuisine"))
+
     for key, value in updated_data.items():
         setattr(recipe, key, value)
 

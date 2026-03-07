@@ -354,6 +354,10 @@ pre {
   gap: 0.7rem;
 }
 
+.result-row.no-image {
+  grid-template-columns: 1fr;
+}
+
 .result-thumb {
   width: 52px;
   height: 52px;
@@ -364,6 +368,19 @@ pre {
 
 .result-content {
   min-width: 0;
+}
+
+.quick-facts {
+  margin-top: 0.45rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.pill.quick {
+  background: #213055;
+  color: #d1ddf7;
+  font-size: 0.74rem;
 }
 
 .instruction-box {
@@ -405,19 +422,28 @@ pre {
 
 .instruction-list {
   margin: 0;
-  padding-left: 1.2rem;
+  padding: 0;
   display: grid;
   gap: 0.55rem;
 }
 
-.instruction-list li {
+.instruction-card {
   line-height: 1.55;
   color: var(--text);
   background: #1a2443;
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 0.6rem 0.75rem;
-  list-style-position: inside;
+}
+
+.instruction-card h4 {
+  margin: 0 0 0.25rem;
+  font-size: 0.9rem;
+  color: #dbe6fb;
+}
+
+.instruction-card p {
+  margin: 0;
 }
 
 .image-frame {

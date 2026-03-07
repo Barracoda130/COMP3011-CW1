@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from "vue-router";
+import { isAuthenticated } from "../stores/auth";
 
 import CreateRecipeView from "../views/CreateRecipeView.vue";
 import HealthView from "../views/HealthView.vue";
@@ -16,7 +17,7 @@ const routes = [
   { path: "/auth/login", name: "login", component: LoginView },
   { path: "/auth/me", name: "me", component: MeView },
   { path: "/recipes", name: "recipes", component: RecipesView },
-  { path: "/recipes/create", name: "recipe-create", component: CreateRecipeView },
+  { path: "/recipes/create", name: "recipe-create", component: CreateRecipeView, meta: { requiresAuth: true } },
   { path: "/recipes/cook/:source/:id", name: "recipe-cook", component: RecipeCookView, props: true },
   { path: "/recipes/:id", name: "recipe-detail", component: RecipeDetailView, props: true }
 ];
@@ -24,6 +25,17 @@ const routes = [
 const router = createRouter({
   history: createWebHistory(),
   routes
+});
+
+router.beforeEach((to) => {
+  if (to.meta.requiresAuth && !isAuthenticated()) {
+    return {
+      path: "/auth/login",
+      query: { redirect: to.fullPath }
+    };
+  }
+
+  return true;
 });
 
 export default router;

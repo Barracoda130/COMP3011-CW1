@@ -28,7 +28,6 @@ def test_register_login_create_recipe_and_rate() -> None:
             "/api/v1/recipes",
             json={
                 "title": "Protein Pasta",
-                "cuisine": "Italian",
                 "prep_minutes": 20,
                 "calories": 650,
                 "tags": ["high-protein", "quick"],
@@ -37,6 +36,7 @@ def test_register_login_create_recipe_and_rate() -> None:
             headers=headers,
         )
         assert create_recipe_response.status_code == 201
+        assert create_recipe_response.json()["cuisine"] == "Unknown"
         recipe_id = create_recipe_response.json()["id"]
 
         rate_response = client.post(
