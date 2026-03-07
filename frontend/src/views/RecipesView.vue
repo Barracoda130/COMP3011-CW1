@@ -1,7 +1,7 @@
 <script setup>
-import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { computed } from "vue";
-import { onBeforeRouteLeave, useRoute } from "vue-router";
+import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { onBeforeRouteLeave } from "vue-router";
 import { RouterLink } from "vue-router";
 import { api } from "../services/api";
 import { isAuthenticated } from "../stores/auth";
@@ -16,12 +16,7 @@ const isLoading = ref(false);
 const searchQuery = ref("");
 const restoredScrollY = ref(0);
 const restoredFromCache = ref(false);
-const route = useRoute();
-
-const authed = computed(() => {
-  route.fullPath;
-  return isAuthenticated();
-});
+const authed = computed(() => isAuthenticated());
 
 function buildQuickFacts(recipe) {
   const facts = [];

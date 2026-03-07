@@ -27,11 +27,13 @@ async function submit() {
   <section class="card stack">
     <h2>Sign In</h2>
     <p class="small">Access your recipes, ratings, and personalized workflow.</p>
-    <label>Email (username)</label>
-    <input v-model="form.email" type="email" />
-    <label>Password</label>
-    <input v-model="form.password" type="password" />
-    <button @click="submit">Login</button>
+    <form class="stack" @submit.prevent="submit">
+      <label>Email (username)</label>
+      <input v-model="form.email" type="email" />
+      <label>Password</label>
+      <input v-model="form.password" type="password" />
+      <button type="submit">Login</button>
+    </form>
     <p v-if="error" class="error">{{ error }}</p>
     <pre v-if="response">{{ JSON.stringify(response, null, 2) }}</pre>
   </section>

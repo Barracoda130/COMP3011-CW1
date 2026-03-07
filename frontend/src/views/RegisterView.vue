@@ -34,16 +34,18 @@ async function submit() {
   <section class="card stack">
     <h2>Create Account</h2>
     <p class="small">Start saving your own recipes and rating what you cook.</p>
-    <label>Email</label>
-    <input v-model="form.email" type="email" />
-    <p v-if="fieldErrors.email" class="error small">{{ fieldErrors.email }}</p>
-    <label>Password</label>
-    <input v-model="form.password" type="password" />
-    <p v-if="fieldErrors.password" class="error small">{{ fieldErrors.password }}</p>
-    <label>Full Name</label>
-    <input v-model="form.full_name" type="text" />
-    <p v-if="fieldErrors.full_name" class="error small">{{ fieldErrors.full_name }}</p>
-    <button @click="submit">Create Account</button>
+    <form class="stack" @submit.prevent="submit">
+      <label>Email</label>
+      <input v-model="form.email" type="email" />
+      <p v-if="fieldErrors.email" class="error small">{{ fieldErrors.email }}</p>
+      <label>Password</label>
+      <input v-model="form.password" type="password" />
+      <p v-if="fieldErrors.password" class="error small">{{ fieldErrors.password }}</p>
+      <label>Full Name</label>
+      <input v-model="form.full_name" type="text" />
+      <p v-if="fieldErrors.full_name" class="error small">{{ fieldErrors.full_name }}</p>
+      <button type="submit">Create Account</button>
+    </form>
     <p v-if="error" class="error">{{ error }}</p>
     <pre v-if="response">{{ JSON.stringify(response, null, 2) }}</pre>
   </section>
