@@ -93,16 +93,16 @@ watch(() => props.id, loadRecipe);
 
 <template>
   <section class="grid">
-    <article class="card">
-      <h2>GET /recipes/{{ id }}</h2>
+    <article class="card stack">
+      <h2>Recipe Overview</h2>
       <p v-if="error" class="error">{{ error }}</p>
       <p v-if="message" class="success">{{ message }}</p>
       <pre v-if="recipe">{{ JSON.stringify(recipe, null, 2) }}</pre>
     </article>
 
-    <article class="card">
-      <h2>PUT /recipes/{{ id }}</h2>
-      <p class="small">Owner-only endpoint.</p>
+    <article class="card stack">
+      <h2>Edit Recipe</h2>
+      <p class="small">Only the recipe owner can edit or delete this record.</p>
       <label>Title</label>
       <input v-model="editForm.title" type="text" />
       <label>Cuisine</label>
@@ -115,12 +115,14 @@ watch(() => props.id, loadRecipe);
       <input v-model="editForm.tags" type="text" />
       <label>Description</label>
       <textarea v-model="editForm.description" rows="3" />
-      <button class="secondary" @click="updateRecipe">Update Recipe</button>
-      <button class="danger" @click="deleteRecipe">DELETE /recipes/{{ id }}</button>
+      <div class="button-row">
+        <button class="secondary" @click="updateRecipe">Save Changes</button>
+        <button class="danger" @click="deleteRecipe">Delete Recipe</button>
+      </div>
     </article>
 
-    <article class="card">
-      <h2>POST /recipes/{{ id }}/ratings</h2>
+    <article class="card stack">
+      <h2>Rate Recipe</h2>
       <label>Score (1-5)</label>
       <input v-model="rateForm.score" type="number" min="1" max="5" />
       <label>Comment</label>

@@ -15,9 +15,9 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="card">
-    <h2>GET /health</h2>
-    <p class="small">Backend liveness endpoint.</p>
+  <section class="card stack">
+    <h2>System Health</h2>
+    <p class="small">Live status from the backend API service.</p>
     <p v-if="error" class="error">{{ error }}</p>
     <pre v-else-if="health">{{ JSON.stringify(health, null, 2) }}</pre>
     <p v-else>Loading...</p>

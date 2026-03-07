@@ -15,13 +15,17 @@ function logout() {
 <template>
   <div class="shell">
     <header class="topbar">
-      <h1>Meal API Console</h1>
+      <div class="brand">
+        <h1>Meal Planner Pro</h1>
+        <p>Discover, save, and cook with confidence</p>
+      </div>
       <nav class="nav-links">
         <RouterLink to="/health">Health</RouterLink>
         <RouterLink to="/auth/register">Register</RouterLink>
         <RouterLink to="/auth/login">Login</RouterLink>
         <RouterLink to="/auth/me">Me</RouterLink>
-        <RouterLink to="/recipes">Recipes</RouterLink>
+        <RouterLink to="/recipes">Discover</RouterLink>
+        <RouterLink to="/recipes/create">Create</RouterLink>
       </nav>
       <button v-if="authed" class="danger" @click="logout">Logout</button>
     </header>

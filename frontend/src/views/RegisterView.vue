@@ -31,8 +31,9 @@ async function submit() {
 </script>
 
 <template>
-  <section class="card">
-    <h2>POST /auth/register</h2>
+  <section class="card stack">
+    <h2>Create Account</h2>
+    <p class="small">Start saving your own recipes and rating what you cook.</p>
     <label>Email</label>
     <input v-model="form.email" type="email" />
     <p v-if="fieldErrors.email" class="error small">{{ fieldErrors.email }}</p>
@@ -42,7 +43,7 @@ async function submit() {
     <label>Full Name</label>
     <input v-model="form.full_name" type="text" />
     <p v-if="fieldErrors.full_name" class="error small">{{ fieldErrors.full_name }}</p>
-    <button @click="submit">Register</button>
+    <button @click="submit">Create Account</button>
     <p v-if="error" class="error">{{ error }}</p>
     <pre v-if="response">{{ JSON.stringify(response, null, 2) }}</pre>
   </section>

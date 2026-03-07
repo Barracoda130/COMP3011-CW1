@@ -35,6 +35,7 @@ class RecipeDiscoverItem(BaseModel):
     source: str
     title: str
     cuisine: str
+    image_url: str | None = None
     prep_minutes: int | None = None
     calories: int | None = None
     tags: list[str] = Field(default_factory=list)

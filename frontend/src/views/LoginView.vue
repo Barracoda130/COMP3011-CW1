@@ -24,8 +24,9 @@ async function submit() {
 </script>
 
 <template>
-  <section class="card">
-    <h2>POST /auth/login</h2>
+  <section class="card stack">
+    <h2>Sign In</h2>
+    <p class="small">Access your recipes, ratings, and personalized workflow.</p>
     <label>Email (username)</label>
     <input v-model="form.email" type="email" />
     <label>Password</label>

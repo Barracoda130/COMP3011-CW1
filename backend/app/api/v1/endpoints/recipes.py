@@ -54,6 +54,7 @@ def discover_recipes(
             source="local",
             title=recipe.title,
             cuisine=recipe.cuisine,
+            image_url=None,
             prep_minutes=recipe.prep_minutes,
             calories=recipe.calories,
             tags=recipe.tags,
