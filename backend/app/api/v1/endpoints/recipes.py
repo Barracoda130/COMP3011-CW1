@@ -9,8 +9,17 @@ from app.db.session import get_db
 from app.models.rating import RecipeRating
 from app.models.recipe import Recipe
 from app.models.user import User
-from app.schemas.recipe import RecipeCreate, RecipeRead, RecipeUpdate
+from app.schemas.recipe import (
+    RecipeCookIngredient,
+    RecipeCookRead,
+    RecipeCreate,
+    RecipeDiscoverItem,
+    RecipeDiscoverResponse,
+    RecipeRead,
+    RecipeUpdate,
+)
 from app.schemas.rating import RatingCreate, RatingRead
+from app.services.themealdb import get_themealdb_recipe_by_id, search_themealdb_recipes
 
 router = APIRouter()
 
@@ -22,6 +31,87 @@ def list_recipes(
     db: Session = Depends(get_db),
 ) -> list[Recipe]:
     return db.query(Recipe).offset(skip).limit(limit).all()
+
+
+@router.get("/discover", response_model=RecipeDiscoverResponse)
+def discover_recipes(
+    query: Annotated[str, Query(min_length=0)] = "",
+    local_limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    external_limit: Annotated[int, Query(ge=1, le=300)] = 80,
+    db: Session = Depends(get_db),
+) -> RecipeDiscoverResponse:
+    local_query = db.query(Recipe)
+    if query.strip():
+        like_pattern = f"%{query.strip()}%"
+        local_query = local_query.filter(
+            (Recipe.title.ilike(like_pattern)) | (Recipe.cuisine.ilike(like_pattern))
+        )
+
+    local_recipes = local_query.limit(local_limit).all()
+    local_items = [
+        RecipeDiscoverItem(
+            id=recipe.id,
+            source="local",
+            title=recipe.title,
+            cuisine=recipe.cuisine,
+            prep_minutes=recipe.prep_minutes,
+            calories=recipe.calories,
+            tags=recipe.tags,
+            description=recipe.description,
+            average_rating=recipe.average_rating,
+            owner_id=recipe.owner_id,
+        )
+        for recipe in local_recipes
+    ]
+
+    external_raw = search_themealdb_recipes(query=query.strip(), limit=external_limit)
+    external_items = [RecipeDiscoverItem(**item) for item in external_raw]
+
+    # Local recipes are intentionally prioritized ahead of external suggestions.
+    combined_items = [*local_items, *external_items]
+
+    return RecipeDiscoverResponse(
+        items=combined_items,
+        local_count=len(local_items),
+        external_count=len(external_items),
+    )
+
+
+@router.get("/cook/{source}/{recipe_id}", response_model=RecipeCookRead)
+def get_recipe_for_cooking(
+    source: str,
+    recipe_id: str,
+    db: Session = Depends(get_db),
+) -> RecipeCookRead:
+    normalized_source = source.strip().lower()
+    if normalized_source == "local":
+        if not recipe_id.isdigit():
+            raise HTTPException(status_code=400, detail="Local recipe id must be numeric")
+
+        recipe = db.query(Recipe).filter(Recipe.id == int(recipe_id)).first()
+        if recipe is None:
+            raise HTTPException(status_code=404, detail="Recipe not found")
+
+        return RecipeCookRead(
+            id=recipe.id,
+            source="local",
+            title=recipe.title,
+            cuisine=recipe.cuisine,
+            description=recipe.description,
+            instructions=recipe.description,
+            tags=recipe.tags,
+            ingredients=[],
+            prep_minutes=recipe.prep_minutes,
+            calories=recipe.calories,
+        )
+
+    if normalized_source == "themealdb":
+        external_recipe = get_themealdb_recipe_by_id(recipe_id)
+        if external_recipe is None:
+            raise HTTPException(status_code=404, detail="External recipe not found")
+        return RecipeCookRead(**external_recipe)
+
+    raise HTTPException(status_code=400, detail="Invalid source. Use 'local' or 'themealdb'.")
 
 
 @router.post("", response_model=RecipeRead, status_code=201)

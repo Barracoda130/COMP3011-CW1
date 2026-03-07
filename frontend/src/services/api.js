@@ -89,8 +89,17 @@ export const api = {
   },
   me: () => request("/auth/me"),
   listRecipes: (skip = 0, limit = 20) => request(`/recipes?skip=${skip}&limit=${limit}`),
+  discoverRecipes: ({ query = "", localLimit = 50, externalLimit = 20 } = {}) => {
+    const params = new URLSearchParams({
+      query,
+      local_limit: String(localLimit),
+      external_limit: String(externalLimit)
+    });
+    return request(`/recipes/discover?${params.toString()}`);
+  },
   createRecipe: (payload) => request("/recipes", { method: "POST", body: JSON.stringify(payload) }),
   getRecipe: (id) => request(`/recipes/${id}`),
+  getCookRecipe: (source, id) => request(`/recipes/cook/${source}/${id}`),
   updateRecipe: (id, payload) => request(`/recipes/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   deleteRecipe: (id) => request(`/recipes/${id}`, { method: "DELETE" }),
   rateRecipe: (id, payload) => request(`/recipes/${id}/ratings`, { method: "POST", body: JSON.stringify(payload) })
