@@ -1,0 +1,11 @@
+{
+  "name": "comp3011-cw1",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "concurrently -n backend,frontend -c green,cyan \"cd backend && .venv\\Scripts\\python.exe -m uvicorn app.main:app --reload\" \"cd frontend && npm.cmd run dev\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

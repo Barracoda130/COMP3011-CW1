@@ -22,3 +22,17 @@ Useful URLs:
 - API root: `http://127.0.0.1:8000/`
 - Swagger docs: `http://127.0.0.1:8000/docs`
 - Health check: `http://127.0.0.1:8000/api/v1/health`
+
+## Run frontend and backend together
+
+From the project root:
+
+1. Install root tooling (one-time):
+	- `npm install`
+2. Start both services:
+	- `npm run dev`
+
+This runs:
+
+- backend on `http://127.0.0.1:8000`
+- frontend on `http://127.0.0.1:5173`

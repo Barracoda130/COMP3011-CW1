@@ -3,6 +3,7 @@
     "python.defaultInterpreterPath": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
     "python.terminal.activateEnvironment": true,
     "chat.tools.terminal.autoApprove": {
-        ".\\backend\\.venv\\Scripts\\python.exe": true
+        ".\\backend\\.venv\\Scripts\\python.exe": true,
+        "npm.cmd": true
     }
 }
