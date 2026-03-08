@@ -1,38 +1,202 @@
-# COMP3011-CW1
+# COMP3011-CW1 Meal Planner Pro
 
-Backend-first coursework scaffold with a structure that supports adding a Vue.js frontend later.
+Full-stack recipe application built with a FastAPI backend and a Vue 3 frontend.
 
-## Project layout
+## Overview
 
-- `backend/` FastAPI backend (versioned API, CORS-ready, test scaffold)
-- `frontend/` reserved folder for future Vue.js app
+The project provides:
 
-## Quick start (backend)
+- Authentication (register/login, JWT bearer token)
+- Local recipe management (create, edit, delete, copy-on-edit)
+- Discover recipes from local storage and TheMealDB
+- Cooking workflow page with checklist-style ingredients and rating UI
+- Personal recommendation flow with cached suggestion results
+- Rated recipes and My Recipes management pages
 
-1. Open a terminal in `backend/`
-2. Install dependencies:
-	- `pip install -r requirements.txt`
-3. Create env file:
-	- `copy .env.example .env`
-4. Run API:
-	- `uvicorn app.main:app --reload`
+## Tech Stack
 
-Useful URLs:
+- Backend: FastAPI, SQLAlchemy, Pydantic, SQLite (default), pytest
+- Frontend: Vue 3, Vue Router, Vite, Vitest
+
+## Project Structure
+
+- `backend/`: API, models, schemas, services, tests
+- `frontend/`: Vue application, routes, views, API client, frontend tests
+- `package.json` (root): helper script to run backend + frontend together
+
+## Prerequisites
+
+- Python 3.12+
+- Node.js 18+ and npm
+
+## Setup
+
+### 1. Backend setup
+
+From `backend/`:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\activate
+pip install -r requirements.txt
+copy .env.example .env
+```
+
+Run backend:
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
+```
+
+Backend URLs:
 
 - API root: `http://127.0.0.1:8000/`
 - Swagger docs: `http://127.0.0.1:8000/docs`
-- Health check: `http://127.0.0.1:8000/api/v1/health`
+- ReDoc: `http://127.0.0.1:8000/redoc`
+- OpenAPI JSON: `http://127.0.0.1:8000/api/v1/openapi.json`
+- Health endpoint: `http://127.0.0.1:8000/api/v1/health`
 
-## Run frontend and backend together
+### 2. Frontend setup
 
-From the project root:
+From `frontend/`:
 
-1. Install root tooling (one-time):
-	- `npm install`
-2. Start both services:
-	- `npm run dev`
+```powershell
+npm install
+npm run dev
+```
 
-This runs:
+Frontend runs on:
 
-- backend on `http://127.0.0.1:8000`
-- frontend on `http://127.0.0.1:5173`
+- `http://127.0.0.1:5173`
+
+### 3. Run both services from project root (optional)
+
+From repository root:
+
+```powershell
+npm install
+npm run dev
+```
+
+This uses `concurrently` to run both backend and frontend.
+
+## Testing
+
+### Backend tests
+
+From `backend/`:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+```
+
+### Frontend tests
+
+From `frontend/`:
+
+```powershell
+npm run test
+```
+
+Watch mode:
+
+```powershell
+npm run test:watch
+```
+
+## Build
+
+From `frontend/`:
+
+```powershell
+npm run build
+```
+
+## Database Notes
+
+- Default DB is SQLite at `backend/meal_api.db`
+- Tables are created on startup
+- `backend/app/db/init_db.py` also applies lightweight schema backfills for incremental changes
+
+## Database Schema
+
+### Tables
+
+`users`
+
+- `id` (PK)
+- `email` (unique, indexed)
+- `hashed_password`
+- `full_name`
+- `created_at`
+
+`recipes`
+
+- `id` (PK)
+- `owner_id` (FK -> `users.id`, indexed)
+- `title` (indexed)
+- `cuisine` (indexed)
+- `prep_minutes`
+- `calories`
+- `description`
+- `image_url`
+- `tags` (JSON)
+- `average_rating`
+- `created_at`
+
+`recipe_ratings`
+
+- `id` (PK)
+- `user_id` (FK -> `users.id`, indexed)
+- `recipe_id` (FK -> `recipes.id`, indexed)
+- `score`
+- `comment`
+- `created_at`
+- Unique constraint: `(user_id, recipe_id)`
+
+`external_recipe_ratings`
+
+- `id` (PK)
+- `user_id` (FK -> `users.id`, indexed)
+- `external_recipe_id` (indexed)
+- `source`
+- `score`
+- `comment`
+- `created_at`
+- Unique constraint: `(user_id, external_recipe_id)`
+
+`user_suggestion_cache`
+
+- `id` (PK)
+- `user_id` (FK -> `users.id`, indexed, unique)
+- `items_json` (JSON)
+- `is_stale`
+- `generated_at`
+- `updated_at`
+
+### Relationship Summary
+
+- One `user` can own many `recipes`
+- One `user` can create many `recipe_ratings` and `external_recipe_ratings`
+- One `recipe` can have many `recipe_ratings`
+- One `user` has at most one `user_suggestion_cache` row
+
+### Indexes (high level)
+
+- `users`: index on `id`, unique index on `email`
+- `recipes`: indexes on `id`, `owner_id`, `title`, `cuisine`
+- `recipe_ratings`: indexes on `id`, `user_id`, `recipe_id`
+- `external_recipe_ratings`: indexes on `id`, `user_id`, `external_recipe_id`
+- `user_suggestion_cache`: indexes on `id`, `user_id`
+
+## API Notes
+
+- API base path: `/api/v1`
+- Most recipe-modifying operations require bearer auth
+- Discover endpoints are public
+- Health endpoint is public and remains directly accessible by URL
+
+## Troubleshooting
+
+- If `npm` is blocked by PowerShell execution policy, use `npm.cmd` in commands.
+- If backend import dependencies fail, verify the virtual environment is active and dependencies are installed.
