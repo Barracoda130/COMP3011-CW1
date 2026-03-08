@@ -98,6 +98,24 @@ export const api = {
     });
     return request(`/recipes/discover?${params.toString()}`);
   },
+  suggestedRecipes: ({ localLimit = 30, externalLimit = 40 } = {}) => {
+    const params = new URLSearchParams({
+      local_limit: String(localLimit),
+      external_limit: String(externalLimit)
+    });
+    return request(`/recipes/suggested?${params.toString()}`);
+  },
+  ratedRecipes: ({ query = "", score = "" } = {}) => {
+    const params = new URLSearchParams();
+    if (query && query.trim()) {
+      params.set("query", query.trim());
+    }
+    if (score !== "" && score !== null && score !== undefined) {
+      params.set("score", String(score));
+    }
+    const suffix = params.toString();
+    return request(`/recipes/rated${suffix ? `?${suffix}` : ""}`);
+  },
   createRecipe: (payload) => request("/recipes", { method: "POST", body: JSON.stringify(payload) }),
   getRecipe: (id) => request(`/recipes/${id}`),
   getCookRecipe: (source, id) => request(`/recipes/cook/${source}/${id}`),

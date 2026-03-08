@@ -1,3 +1,5 @@
+import re
+from collections import defaultdict
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -16,7 +18,10 @@ from app.schemas.recipe import (
     RecipeCreate,
     RecipeDiscoverItem,
     RecipeDiscoverResponse,
+    RecipeRatedItem,
+    RecipeRatedResponse,
     RecipeRead,
+    RecipeSuggestionResponse,
     RecipeUpdate,
 )
 from app.schemas.rating import ExternalRatingRead, RatingCreate, RatingRead
@@ -30,6 +35,62 @@ def _normalized_cuisine(value: str | None) -> str:
         return "Unknown"
     normalized = value.strip()
     return normalized or "Unknown"
+
+
+def _tokenize_feature(value: str) -> list[str]:
+    normalized = value.strip().lower()
+    if not normalized:
+        return []
+    return [token for token in re.split(r"[^a-z0-9]+", normalized) if token and len(token) > 1]
+
+
+def _local_recipe_feature_set(recipe: Recipe) -> set[str]:
+    features: set[str] = set()
+    for tag in recipe.tags or []:
+        features.update(_tokenize_feature(tag))
+    features.update(_tokenize_feature(recipe.cuisine or ""))
+    return features
+
+
+def _external_item_feature_set(item: RecipeDiscoverItem) -> set[str]:
+    features: set[str] = set()
+    for tag in item.tags:
+        features.update(_tokenize_feature(tag))
+    for ingredient in item.key_ingredients:
+        features.update(_tokenize_feature(ingredient))
+    features.update(_tokenize_feature(item.cuisine))
+    return features
+
+
+def _weighted_overlap(candidate_features: set[str], feature_weights: dict[str, float]) -> float:
+    if not candidate_features:
+        return 0.0
+    return sum(feature_weights.get(feature, 0.0) for feature in candidate_features)
+
+
+def _jaccard(candidate_features: set[str], reference_features: set[str]) -> float:
+    if not candidate_features or not reference_features:
+        return 0.0
+    union = candidate_features | reference_features
+    if not union:
+        return 0.0
+    return len(candidate_features & reference_features) / len(union)
+
+
+def _extract_themealdb_external_id(item: RecipeDiscoverItem) -> str:
+    if item.external_id and str(item.external_id).strip().isdigit():
+        return str(item.external_id).strip()
+
+    raw_id = str(item.id).strip()
+    if raw_id.startswith("themealdb-"):
+        suffix = raw_id.split("themealdb-", maxsplit=1)[1]
+        if suffix.isdigit():
+            return suffix
+
+    if raw_id.isdigit():
+        return raw_id
+
+    return ""
 
 
 @router.get("", response_model=list[RecipeRead])
@@ -123,6 +184,319 @@ def get_recipe_for_cooking(
         return RecipeCookRead(**external_recipe)
 
     raise HTTPException(status_code=400, detail="Invalid source. Use 'local' or 'themealdb'.")
+
+
+@router.get("/suggested", response_model=RecipeSuggestionResponse)
+def suggested_recipes_for_user(
+    local_limit: Annotated[int, Query(ge=1, le=80)] = 30,
+    external_limit: Annotated[int, Query(ge=1, le=120)] = 40,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RecipeSuggestionResponse:
+    formula = (
+        "score = 0.55 * Jaccard(candidate, liked_features) "
+        "+ 0.30 * weighted_liked_overlap "
+        "- 0.30 * Jaccard(candidate, disliked_features) "
+        "- 0.20 * weighted_disliked_overlap"
+    )
+
+    local_ratings = db.query(RecipeRating).filter(RecipeRating.user_id == current_user.id).all()
+    external_ratings = (
+        db.query(ExternalRecipeRating)
+        .filter(
+            ExternalRecipeRating.user_id == current_user.id,
+            ExternalRecipeRating.source == "themealdb",
+        )
+        .all()
+    )
+
+    if not local_ratings and not external_ratings:
+        return RecipeSuggestionResponse(items=[], local_count=0, external_count=0, formula=formula)
+
+    liked_features: set[str] = set()
+    disliked_features: set[str] = set()
+    liked_feature_weights: dict[str, float] = defaultdict(float)
+    disliked_feature_weights: dict[str, float] = defaultdict(float)
+
+    rated_local_ids: set[int] = set()
+    rated_external_ids: set[str] = set()
+
+    local_recipe_ids = [rating.recipe_id for rating in local_ratings]
+    local_recipe_map: dict[int, Recipe] = {}
+    if local_recipe_ids:
+        local_recipe_rows = db.query(Recipe).filter(Recipe.id.in_(local_recipe_ids)).all()
+        local_recipe_map = {recipe.id: recipe for recipe in local_recipe_rows}
+
+    for rating in local_ratings:
+        rated_local_ids.add(rating.recipe_id)
+        recipe = local_recipe_map.get(rating.recipe_id)
+        if recipe is None:
+            continue
+
+        features = _local_recipe_feature_set(recipe)
+        if not features:
+            continue
+
+        if rating.score >= 4:
+            weight = float(rating.score - 3)
+            liked_features.update(features)
+            for feature in features:
+                liked_feature_weights[feature] += weight
+        elif rating.score <= 2:
+            weight = float(3 - rating.score)
+            disliked_features.update(features)
+            for feature in features:
+                disliked_feature_weights[feature] += weight
+
+    for rating in external_ratings:
+        external_id = (rating.external_recipe_id or "").strip()
+        if not external_id:
+            continue
+        rated_external_ids.add(external_id)
+
+        external_recipe = get_themealdb_recipe_by_id(external_id)
+        if external_recipe is None:
+            continue
+
+        ingredient_names = [item.get("name", "") for item in external_recipe.get("ingredients", [])]
+        features: set[str] = set()
+        for tag in external_recipe.get("tags", []):
+            features.update(_tokenize_feature(tag))
+        for ingredient_name in ingredient_names:
+            features.update(_tokenize_feature(ingredient_name))
+        features.update(_tokenize_feature(external_recipe.get("cuisine") or ""))
+
+        if not features:
+            continue
+
+        if rating.score >= 4:
+            weight = float(rating.score - 3)
+            liked_features.update(features)
+            for feature in features:
+                liked_feature_weights[feature] += weight
+        elif rating.score <= 2:
+            weight = float(3 - rating.score)
+            disliked_features.update(features)
+            for feature in features:
+                disliked_feature_weights[feature] += weight
+
+    # If the user only has neutral ratings, there is no preference signal.
+    if not liked_features and not disliked_features:
+        return RecipeSuggestionResponse(items=[], local_count=0, external_count=0, formula=formula)
+
+    candidate_items: list[RecipeDiscoverItem] = []
+
+    local_candidates = db.query(Recipe).limit(400).all()
+    local_candidate_features: dict[int, set[str]] = {}
+    for recipe in local_candidates:
+        if recipe.id in rated_local_ids:
+            continue
+        local_candidate_features[recipe.id] = _local_recipe_feature_set(recipe)
+        candidate_items.append(
+            RecipeDiscoverItem(
+                id=recipe.id,
+                source="local",
+                title=recipe.title,
+                cuisine=_normalized_cuisine(recipe.cuisine),
+                image_url=None,
+                prep_minutes=recipe.prep_minutes,
+                calories=recipe.calories,
+                tags=recipe.tags,
+                description=recipe.description,
+                average_rating=recipe.average_rating,
+                owner_id=recipe.owner_id,
+                category=None,
+                key_ingredients=[],
+            )
+        )
+
+    query_terms = [
+        feature
+        for feature, _weight in sorted(
+            liked_feature_weights.items(), key=lambda entry: entry[1], reverse=True
+        )[:6]
+    ]
+    if not query_terms:
+        query_terms = [
+            feature
+            for feature, _weight in sorted(
+                disliked_feature_weights.items(), key=lambda entry: entry[1], reverse=True
+            )[:3]
+        ]
+
+    external_candidates_by_id: dict[str, RecipeDiscoverItem] = {}
+    for term in query_terms:
+        for raw_item in search_themealdb_recipes(query=term, limit=external_limit):
+            item = RecipeDiscoverItem(**raw_item)
+            external_id = _extract_themealdb_external_id(item)
+            if not external_id or external_id in rated_external_ids:
+                continue
+            if external_id not in external_candidates_by_id:
+                external_candidates_by_id[external_id] = item
+
+    candidate_items.extend(external_candidates_by_id.values())
+
+    scored_items: list[RecipeDiscoverItem] = []
+    for item in candidate_items:
+        if item.source == "local":
+            candidate_features = local_candidate_features.get(int(item.id), set())
+        else:
+            candidate_features = _external_item_feature_set(item)
+
+        if not candidate_features:
+            continue
+
+        liked_jaccard = _jaccard(candidate_features, liked_features)
+        disliked_jaccard = _jaccard(candidate_features, disliked_features)
+        liked_overlap = _weighted_overlap(candidate_features, liked_feature_weights)
+        disliked_overlap = _weighted_overlap(candidate_features, disliked_feature_weights)
+
+        score = (
+            (0.55 * liked_jaccard)
+            + (0.30 * liked_overlap)
+            - (0.30 * disliked_jaccard)
+            - (0.20 * disliked_overlap)
+        )
+
+        if score <= 0:
+            continue
+
+        item.recommendation_score = round(score, 4)
+        scored_items.append(item)
+
+    scored_items.sort(key=lambda item: item.recommendation_score or 0.0, reverse=True)
+
+    local_items = [
+        item for item in scored_items if item.source == "local" and int(item.id) not in rated_local_ids
+    ][:local_limit]
+    external_items = [
+        item
+        for item in scored_items
+        if item.source == "themealdb" and _extract_themealdb_external_id(item) not in rated_external_ids
+    ][:external_limit]
+    items = [*local_items, *external_items]
+
+    return RecipeSuggestionResponse(
+        items=items,
+        local_count=len(local_items),
+        external_count=len(external_items),
+        formula=formula,
+    )
+
+
+@router.get("/rated", response_model=RecipeRatedResponse)
+def get_my_rated_recipes(
+    query: Annotated[str, Query(min_length=0)] = "",
+    score: Annotated[int | None, Query(ge=1, le=5)] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RecipeRatedResponse:
+    normalized_query = query.strip().lower()
+
+    local_rating_query = db.query(RecipeRating).filter(RecipeRating.user_id == current_user.id)
+    external_rating_query = (
+        db.query(ExternalRecipeRating)
+        .filter(
+            ExternalRecipeRating.user_id == current_user.id,
+            ExternalRecipeRating.source == "themealdb",
+        )
+    )
+
+    if score is not None:
+        local_rating_query = local_rating_query.filter(RecipeRating.score == score)
+        external_rating_query = external_rating_query.filter(ExternalRecipeRating.score == score)
+
+    local_ratings = local_rating_query.order_by(RecipeRating.created_at.desc()).all()
+    external_ratings = external_rating_query.order_by(ExternalRecipeRating.created_at.desc()).all()
+
+    local_recipe_ids = [rating.recipe_id for rating in local_ratings]
+    local_recipe_map: dict[int, Recipe] = {}
+    if local_recipe_ids:
+        local_recipes = db.query(Recipe).filter(Recipe.id.in_(local_recipe_ids)).all()
+        local_recipe_map = {recipe.id: recipe for recipe in local_recipes}
+
+    local_items: list[RecipeRatedItem] = []
+    for rating in local_ratings:
+        recipe = local_recipe_map.get(rating.recipe_id)
+        if recipe is None:
+            continue
+
+        if normalized_query and normalized_query not in recipe.title.lower() and normalized_query not in (
+            recipe.cuisine or ""
+        ).lower():
+            continue
+
+        local_items.append(
+            RecipeRatedItem(
+                id=recipe.id,
+                source="local",
+                title=recipe.title,
+                cuisine=_normalized_cuisine(recipe.cuisine),
+                image_url=None,
+                prep_minutes=recipe.prep_minutes,
+                calories=recipe.calories,
+                tags=recipe.tags,
+                description=recipe.description,
+                average_rating=recipe.average_rating,
+                owner_id=recipe.owner_id,
+                category=None,
+                key_ingredients=[],
+                my_rating=rating.score,
+                my_comment=rating.comment,
+            )
+        )
+
+    external_items: list[RecipeRatedItem] = []
+    for rating in external_ratings:
+        external_id = (rating.external_recipe_id or "").strip()
+        if not external_id:
+            continue
+
+        cooked = get_themealdb_recipe_by_id(external_id)
+        if cooked is None:
+            continue
+
+        title = cooked.get("title") or "Untitled"
+        cuisine = cooked.get("cuisine") or "Unknown"
+
+        if normalized_query and normalized_query not in title.lower() and normalized_query not in cuisine.lower():
+            continue
+
+        key_ingredients = [
+            ingredient.get("name", "")
+            for ingredient in cooked.get("ingredients", [])[:4]
+            if ingredient.get("name")
+        ]
+
+        external_items.append(
+            RecipeRatedItem(
+                id=f"themealdb-{external_id}",
+                external_id=external_id,
+                source="themealdb",
+                title=title,
+                cuisine=cuisine,
+                image_url=cooked.get("image_url"),
+                prep_minutes=cooked.get("prep_minutes"),
+                calories=cooked.get("calories"),
+                tags=cooked.get("tags") or [],
+                description=cooked.get("description"),
+                average_rating=None,
+                owner_id=None,
+                category=cooked.get("description"),
+                key_ingredients=key_ingredients,
+                my_rating=rating.score,
+                my_comment=rating.comment,
+            )
+        )
+
+    items: list[RecipeRatedItem] = [*local_items, *external_items]
+    items.sort(key=lambda item: item.my_rating, reverse=True)
+
+    return RecipeRatedResponse(
+        items=items,
+        local_count=len(local_items),
+        external_count=len(external_items),
+    )
 
 
 @router.post("", response_model=RecipeRead, status_code=201)

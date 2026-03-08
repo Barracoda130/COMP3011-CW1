@@ -45,10 +45,29 @@ class RecipeDiscoverItem(BaseModel):
     external_id: str | None = None
     category: str | None = None
     key_ingredients: list[str] = Field(default_factory=list)
+    recommendation_score: float | None = None
 
 
 class RecipeDiscoverResponse(BaseModel):
     items: list[RecipeDiscoverItem]
+    local_count: int
+    external_count: int
+
+
+class RecipeSuggestionResponse(BaseModel):
+    items: list[RecipeDiscoverItem]
+    local_count: int
+    external_count: int
+    formula: str
+
+
+class RecipeRatedItem(RecipeDiscoverItem):
+    my_rating: int
+    my_comment: str | None = None
+
+
+class RecipeRatedResponse(BaseModel):
+    items: list[RecipeRatedItem]
     local_count: int
     external_count: int
 
