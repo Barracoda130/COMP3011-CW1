@@ -16,7 +16,7 @@ async function submit() {
     const token = await api.login(form.value);
     response.value = token;
     setToken(token.access_token);
-    router.push("/auth/me");
+    router.push("/recipes");
   } catch (err) {
     error.value = err.message;
   }

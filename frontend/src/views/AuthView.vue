@@ -24,7 +24,7 @@ const safeRedirectPath = computed(() => {
   if (typeof candidate === "string" && candidate.startsWith("/")) {
     return candidate;
   }
-  return "/auth/me";
+  return "/recipes";
 });
 
 function switchMode(nextMode) {

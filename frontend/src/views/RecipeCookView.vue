@@ -276,7 +276,7 @@ watch(() => `${props.source}:${props.id}`, loadCookRecipe);
 
         <article class="card">
           <h3>How to cook</h3>
-          <p class="small" v-if="showDescriptionAboveSteps">{{ recipe.description }}</p>
+          <p class="small" v-if="showDescriptionAboveStepst ">{{ recipe.description }}</p>
           <div v-if="instructionSteps.length" class="instruction-list">
             <article v-for="(step, idx) in instructionSteps" :key="idx" class="instruction-card">
               <h4>{{ step.heading }}</h4>

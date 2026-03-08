@@ -24,8 +24,6 @@ function goToAuth() {
         <p>Discover, save, and cook with confidence</p>
       </div>
       <nav class="nav-links">
-        <RouterLink to="/health">Health</RouterLink>
-        <RouterLink to="/auth/me">Me</RouterLink>
         <RouterLink to="/recipes">Discover</RouterLink>
         <RouterLink v-if="authed" to="/recipes/mine">My Recipes</RouterLink>
         <RouterLink v-if="authed" to="/recipes/suggested">Suggested</RouterLink>
