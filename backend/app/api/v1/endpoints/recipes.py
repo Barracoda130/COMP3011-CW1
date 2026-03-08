@@ -1,5 +1,6 @@
 import re
 from collections import defaultdict
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -11,6 +12,7 @@ from app.db.session import get_db
 from app.models.external_rating import ExternalRecipeRating
 from app.models.rating import RecipeRating
 from app.models.recipe import Recipe
+from app.models.suggestion_cache import UserSuggestionCache
 from app.models.user import User
 from app.schemas.recipe import (
     RecipeCookIngredient,
@@ -91,6 +93,68 @@ def _extract_themealdb_external_id(item: RecipeDiscoverItem) -> str:
         return raw_id
 
     return ""
+
+
+def _cache_is_fresh(cache_entry: UserSuggestionCache | None) -> bool:
+    if cache_entry is None:
+        return False
+    if cache_entry.is_stale:
+        return False
+    if cache_entry.generated_at is None:
+        return False
+    generated_at = cache_entry.generated_at
+    if generated_at.tzinfo is None:
+        generated_at = generated_at.replace(tzinfo=UTC)
+    return datetime.now(UTC) - generated_at < timedelta(days=1)
+
+
+def _mark_suggestions_stale(db: Session, user_id: int) -> None:
+    cache_entry = db.query(UserSuggestionCache).filter(UserSuggestionCache.user_id == user_id).first()
+    if cache_entry is None:
+        cache_entry = UserSuggestionCache(user_id=user_id, items_json=[], is_stale=True, generated_at=None)
+        db.add(cache_entry)
+        return
+
+    cache_entry.is_stale = True
+
+
+def _hydrate_cached_suggestion_items(
+    db: Session,
+    user_id: int,
+    items_json: list[dict],
+) -> list[RecipeDiscoverItem]:
+    rated_local_ids = {
+        rating.recipe_id
+        for rating in db.query(RecipeRating).filter(RecipeRating.user_id == user_id).all()
+    }
+    rated_external_ids = {
+        (rating.external_recipe_id or "").strip()
+        for rating in db.query(ExternalRecipeRating)
+        .filter(
+            ExternalRecipeRating.user_id == user_id,
+            ExternalRecipeRating.source == "themealdb",
+        )
+        .all()
+    }
+
+    hydrated: list[RecipeDiscoverItem] = []
+    for raw in items_json:
+        try:
+            item = RecipeDiscoverItem(**raw)
+        except Exception:
+            continue
+
+        if item.source == "local":
+            if int(item.id) in rated_local_ids:
+                continue
+        elif item.source == "themealdb":
+            external_id = _extract_themealdb_external_id(item)
+            if external_id in rated_external_ids:
+                continue
+
+        hydrated.append(item)
+
+    return hydrated
 
 
 @router.get("", response_model=list[RecipeRead])
@@ -199,6 +263,23 @@ def suggested_recipes_for_user(
         "- 0.30 * Jaccard(candidate, disliked_features) "
         "- 0.20 * weighted_disliked_overlap"
     )
+
+    cache_entry = db.query(UserSuggestionCache).filter(UserSuggestionCache.user_id == current_user.id).first()
+    if _cache_is_fresh(cache_entry):
+        assert cache_entry is not None
+        cached_items = _hydrate_cached_suggestion_items(
+            db=db,
+            user_id=current_user.id,
+            items_json=cache_entry.items_json or [],
+        )
+        local_count = sum(1 for item in cached_items if item.source == "local")
+        external_count = sum(1 for item in cached_items if item.source == "themealdb")
+        return RecipeSuggestionResponse(
+            items=cached_items,
+            local_count=local_count,
+            external_count=external_count,
+            formula=formula,
+        )
 
     local_ratings = db.query(RecipeRating).filter(RecipeRating.user_id == current_user.id).all()
     external_ratings = (
@@ -366,20 +447,23 @@ def suggested_recipes_for_user(
 
     scored_items.sort(key=lambda item: item.recommendation_score or 0.0, reverse=True)
 
-    local_items = [
-        item for item in scored_items if item.source == "local" and int(item.id) not in rated_local_ids
-    ][:local_limit]
-    external_items = [
-        item
-        for item in scored_items
-        if item.source == "themealdb" and _extract_themealdb_external_id(item) not in rated_external_ids
-    ][:external_limit]
-    items = [*local_items, *external_items]
+    total_limit = local_limit + external_limit
+    items = scored_items[:total_limit]
+    local_count = sum(1 for item in items if item.source == "local")
+    external_count = sum(1 for item in items if item.source == "themealdb")
+
+    if cache_entry is None:
+        cache_entry = UserSuggestionCache(user_id=current_user.id)
+        db.add(cache_entry)
+    cache_entry.items_json = [item.model_dump() for item in items]
+    cache_entry.generated_at = datetime.now(UTC)
+    cache_entry.is_stale = False
+    db.commit()
 
     return RecipeSuggestionResponse(
         items=items,
-        local_count=len(local_items),
-        external_count=len(external_items),
+        local_count=local_count,
+        external_count=external_count,
         formula=formula,
     )
 
@@ -599,6 +683,8 @@ def rate_recipe(
     )
     recipe.average_rating = round(float(average_score if average_score is not None else payload.score), 2)
 
+    _mark_suggestions_stale(db, current_user.id)
+
     db.commit()
     db.refresh(rating)
     return rating
@@ -652,6 +738,8 @@ def rate_external_themealdb_recipe(
         comment=payload.comment,
     )
     db.add(rating)
+
+    _mark_suggestions_stale(db, current_user.id)
 
     db.commit()
     db.refresh(rating)

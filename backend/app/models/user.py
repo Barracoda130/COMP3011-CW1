@@ -20,3 +20,6 @@ class User(Base):
     external_ratings = relationship(
         "ExternalRecipeRating", back_populates="user", cascade="all, delete-orphan"
     )
+    suggestion_cache = relationship(
+        "UserSuggestionCache", back_populates="user", cascade="all, delete-orphan", uselist=False
+    )

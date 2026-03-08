@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
+import { useRoute } from "vue-router";
 import { api } from "../services/api";
 import { isAuthenticated } from "../stores/auth";
 
@@ -8,6 +9,7 @@ const props = defineProps({
   source: { type: String, required: true },
   id: { type: [String, Number], required: true }
 });
+const route = useRoute();
 
 const recipe = ref(null);
 const error = ref("");
@@ -22,6 +24,12 @@ const sourceType = computed(() => String(props.source).toLowerCase());
 const canRateCookedRecipe = computed(() => sourceType.value === "local" || sourceType.value === "themealdb");
 const isLoggedIn = computed(() => isAuthenticated());
 const previewedScore = computed(() => hoverScore.value ?? ratingForm.value.score ?? 0);
+const backPath = computed(() => {
+  const from = String(route.query.from || "").toLowerCase();
+  if (from === "suggested") return "/recipes/suggested";
+  if (from === "rated") return "/recipes/rated";
+  return "/recipes";
+});
 
 function normalizeHeading(rawHeading) {
   const match = rawHeading.match(/(step|task)\s*(\d+)/i);
@@ -208,7 +216,7 @@ watch(() => `${props.source}:${props.id}`, loadCookRecipe);
 
 <template>
   <section class="card stack">
-    <RouterLink to="/recipes">← Back to recipes</RouterLink>
+    <RouterLink :to="backPath">← Back to recipes</RouterLink>
     <p v-if="error" class="error">{{ error }}</p>
 
     <template v-if="recipe">

@@ -368,3 +368,105 @@ def test_get_rated_recipes_supports_search_and_score_filter(monkeypatch) -> None
         assert len(payload["items"]) == 1
         assert payload["items"][0]["title"] == "Lemon Pasta"
         assert payload["items"][0]["my_rating"] == 5
+
+
+def test_suggested_recipes_uses_cache_until_new_rating(monkeypatch) -> None:
+    email = f"test-{uuid4().hex[:8]}@example.com"
+    password = "StrongPass123"
+
+    call_counter = {"count": 0}
+
+    def fake_search_themealdb(query, limit=20):
+        call_counter["count"] += 1
+        return []
+
+    monkeypatch.setattr(recipes_endpoints, "search_themealdb_recipes", fake_search_themealdb)
+
+    with TestClient(app) as client:
+        register_response = client.post(
+            "/api/v1/auth/register",
+            json={"email": email, "password": password, "full_name": "Cache User"},
+        )
+        assert register_response.status_code == 201
+
+        login_response = client.post(
+            "/api/v1/auth/login",
+            data={"username": email, "password": password},
+        )
+        assert login_response.status_code == 200
+        token = login_response.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        r1 = client.post(
+            "/api/v1/recipes",
+            json={
+                "title": "Herb Pasta",
+                "cuisine": "Italian",
+                "prep_minutes": 20,
+                "calories": 550,
+                "tags": ["pasta", "herb"],
+                "description": "Good",
+            },
+            headers=headers,
+        )
+        assert r1.status_code == 201
+        r1_id = r1.json()["id"]
+
+        rate1 = client.post(
+            f"/api/v1/recipes/{r1_id}/ratings",
+            json={"score": 5, "comment": "great"},
+            headers=headers,
+        )
+        assert rate1.status_code == 200
+
+        candidate = client.post(
+            "/api/v1/recipes",
+            json={
+                "title": "Pesto Pasta",
+                "cuisine": "Italian",
+                "prep_minutes": 25,
+                "calories": 600,
+                "tags": ["pasta", "basil"],
+                "description": "Candidate",
+            },
+            headers=headers,
+        )
+        assert candidate.status_code == 201
+
+        first_suggested = client.get("/api/v1/recipes/suggested", headers=headers)
+        assert first_suggested.status_code == 200
+        first_payload = first_suggested.json()
+        assert any(item["title"] == "Pesto Pasta" for item in first_payload["items"])
+
+        first_call_count = call_counter["count"]
+        assert first_call_count >= 1
+
+        second_suggested = client.get("/api/v1/recipes/suggested", headers=headers)
+        assert second_suggested.status_code == 200
+        assert call_counter["count"] == first_call_count
+
+        r2 = client.post(
+            "/api/v1/recipes",
+            json={
+                "title": "Spicy Tofu",
+                "cuisine": "Asian",
+                "prep_minutes": 18,
+                "calories": 430,
+                "tags": ["tofu", "spicy"],
+                "description": "Disliked pattern",
+            },
+            headers=headers,
+        )
+        assert r2.status_code == 201
+        r2_id = r2.json()["id"]
+
+        rate2 = client.post(
+            f"/api/v1/recipes/{r2_id}/ratings",
+            json={"score": 1, "comment": "bad"},
+            headers=headers,
+        )
+        assert rate2.status_code == 200
+
+        third_suggested = client.get("/api/v1/recipes/suggested", headers=headers)
+        assert third_suggested.status_code == 200
+        assert call_counter["count"] > first_call_count

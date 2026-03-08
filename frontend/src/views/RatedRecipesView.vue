@@ -101,7 +101,10 @@ onMounted(loadRatedRecipes);
             />
             <div class="result-content">
               <RouterLink
-                :to="`/recipes/cook/${recipe.source}/${recipe.source === 'themealdb' ? recipe.external_id : recipe.id}`"
+                :to="{
+                  path: `/recipes/cook/${recipe.source}/${recipe.source === 'themealdb' ? recipe.external_id : recipe.id}`,
+                  query: { from: 'rated' }
+                }"
               >
                 {{ recipe.title }}
               </RouterLink>
