@@ -1,7 +1,12 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import AnyHttpUrl
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+DEFAULT_SQLITE_PATH = (BACKEND_DIR / "meal_api.db").as_posix()
 
 
 class Settings(BaseSettings):
@@ -16,7 +21,7 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173",
     ]
 
-    DATABASE_URL: str = "sqlite:///./meal_api.db"
+    DATABASE_URL: str = f"sqlite:///{DEFAULT_SQLITE_PATH}"
     SECRET_KEY: str = "change-this-in-production"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
