@@ -27,6 +27,7 @@ function goToAuth() {
         <RouterLink to="/health">Health</RouterLink>
         <RouterLink to="/auth/me">Me</RouterLink>
         <RouterLink to="/recipes">Discover</RouterLink>
+        <RouterLink v-if="authed" to="/recipes/mine">My Recipes</RouterLink>
         <RouterLink v-if="authed" to="/recipes/suggested">Suggested</RouterLink>
         <RouterLink v-if="authed" to="/recipes/rated">Rated</RouterLink>
         <RouterLink v-if="authed" to="/recipes/create">Create</RouterLink>

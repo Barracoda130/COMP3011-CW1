@@ -5,6 +5,7 @@ import AuthView from "../views/AuthView.vue";
 import CreateRecipeView from "../views/CreateRecipeView.vue";
 import HealthView from "../views/HealthView.vue";
 import MeView from "../views/MeView.vue";
+import MyRecipesView from "../views/MyRecipesView.vue";
 import RecipeCookView from "../views/RecipeCookView.vue";
 import RecipeDetailView from "../views/RecipeDetailView.vue";
 import RatedRecipesView from "../views/RatedRecipesView.vue";
@@ -19,6 +20,7 @@ const routes = [
   { path: "/auth/login", redirect: { path: "/auth", query: { mode: "login" } } },
   { path: "/auth/me", name: "me", component: MeView },
   { path: "/recipes", name: "recipes", component: RecipesView },
+  { path: "/recipes/mine", name: "recipes-mine", component: MyRecipesView, meta: { requiresAuth: true } },
   { path: "/recipes/suggested", name: "recipes-suggested", component: SuggestedRecipesView, meta: { requiresAuth: true } },
   { path: "/recipes/rated", name: "recipes-rated", component: RatedRecipesView, meta: { requiresAuth: true } },
   { path: "/recipes/create", name: "recipe-create", component: CreateRecipeView, meta: { requiresAuth: true } },

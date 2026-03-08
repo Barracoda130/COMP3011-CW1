@@ -166,6 +166,21 @@ def list_recipes(
     return db.query(Recipe).offset(skip).limit(limit).all()
 
 
+@router.get("/mine", response_model=list[RecipeRead])
+def list_my_recipes(
+    query: Annotated[str, Query(min_length=0)] = "",
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[Recipe]:
+    recipe_query = db.query(Recipe).filter(Recipe.owner_id == current_user.id)
+    if query.strip():
+        like_pattern = f"%{query.strip()}%"
+        recipe_query = recipe_query.filter(
+            (Recipe.title.ilike(like_pattern)) | (Recipe.cuisine.ilike(like_pattern))
+        )
+    return recipe_query.order_by(Recipe.created_at.desc()).all()
+
+
 @router.get("/discover", response_model=RecipeDiscoverResponse)
 def discover_recipes(
     query: Annotated[str, Query(min_length=0)] = "",
@@ -187,7 +202,7 @@ def discover_recipes(
             source="local",
             title=recipe.title,
             cuisine=_normalized_cuisine(recipe.cuisine),
-            image_url=None,
+            image_url=recipe.image_url,
             prep_minutes=recipe.prep_minutes,
             calories=recipe.calories,
             tags=recipe.tags,
@@ -235,6 +250,7 @@ def get_recipe_for_cooking(
             cuisine=_normalized_cuisine(recipe.cuisine),
             description=recipe.description,
             instructions=recipe.description,
+            image_url=recipe.image_url,
             tags=recipe.tags,
             ingredients=[],
             prep_minutes=recipe.prep_minutes,
@@ -516,7 +532,7 @@ def get_my_rated_recipes(
                 source="local",
                 title=recipe.title,
                 cuisine=_normalized_cuisine(recipe.cuisine),
-                image_url=None,
+                image_url=recipe.image_url,
                 prep_minutes=recipe.prep_minutes,
                 calories=recipe.calories,
                 tags=recipe.tags,
@@ -597,6 +613,37 @@ def create_recipe(
     db.commit()
     db.refresh(recipe)
     return recipe
+
+
+@router.post("/{recipe_id}/copy", response_model=RecipeRead, status_code=201)
+def create_modified_recipe_copy(
+    recipe_id: int,
+    payload: RecipeUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Recipe:
+    source_recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
+    if source_recipe is None:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+
+    overrides = payload.model_dump(exclude_unset=True)
+
+    copied_recipe = Recipe(
+        owner_id=current_user.id,
+        title=overrides.get("title", source_recipe.title),
+        cuisine=_normalized_cuisine(overrides.get("cuisine", source_recipe.cuisine)),
+        prep_minutes=overrides.get("prep_minutes", source_recipe.prep_minutes),
+        calories=overrides.get("calories", source_recipe.calories),
+        image_url=overrides.get("image_url", source_recipe.image_url),
+        tags=overrides.get("tags", source_recipe.tags),
+        description=overrides.get("description", source_recipe.description),
+        average_rating=None,
+    )
+
+    db.add(copied_recipe)
+    db.commit()
+    db.refresh(copied_recipe)
+    return copied_recipe
 
 
 @router.get("/{recipe_id}", response_model=RecipeRead)

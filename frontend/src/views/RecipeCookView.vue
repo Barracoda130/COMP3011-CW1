@@ -28,7 +28,15 @@ const backPath = computed(() => {
   const from = String(route.query.from || "").toLowerCase();
   if (from === "suggested") return "/recipes/suggested";
   if (from === "rated") return "/recipes/rated";
+  if (from === "mine") return "/recipes/mine";
   return "/recipes";
+});
+const showDescriptionAboveSteps = computed(() => {
+  const description = String(recipe.value?.description || "").trim();
+  const instructions = String(recipe.value?.instructions || "").trim();
+  if (!description) return false;
+  if (!instructions) return true;
+  return description !== instructions;
 });
 
 function normalizeHeading(rawHeading) {
@@ -261,7 +269,7 @@ watch(() => `${props.source}:${props.id}`, loadCookRecipe);
 
         <article class="card">
           <h3>How to cook</h3>
-          <p class="small" v-if="recipe.description">{{ recipe.description }}</p>
+          <p class="small" v-if="showDescriptionAboveSteps">{{ recipe.description }}</p>
           <div v-if="instructionSteps.length" class="instruction-list">
             <article v-for="(step, idx) in instructionSteps" :key="idx" class="instruction-card">
               <h4>{{ step.heading }}</h4>

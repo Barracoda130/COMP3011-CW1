@@ -6,8 +6,9 @@ class RecipeBase(BaseModel):
     cuisine: str | None = Field(default=None, max_length=60)
     prep_minutes: int = Field(ge=1, le=600)
     calories: int | None = Field(default=None, ge=0)
+    image_url: str | None = Field(default=None, max_length=1_000_000)
     tags: list[str] = Field(default_factory=list)
-    description: str | None = Field(default=None, max_length=2000)
+    description: str | None = None
 
 
 class RecipeCreate(RecipeBase):
@@ -19,7 +20,9 @@ class RecipeUpdate(BaseModel):
     cuisine: str | None = Field(default=None, max_length=60)
     prep_minutes: int | None = Field(default=None, ge=1, le=600)
     calories: int | None = Field(default=None, ge=0)
+    image_url: str | None = Field(default=None, max_length=1_000_000)
     tags: list[str] | None = None
+    description: str | None = None
 
 
 class RecipeRead(RecipeBase):

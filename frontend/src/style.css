@@ -418,6 +418,37 @@ pre {
   min-width: 0;
 }
 
+.my-recipe-main {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.my-recipe-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.action-link.secondary {
+  text-decoration: none;
+  border-radius: 12px;
+  padding: 0.65rem 0.95rem;
+  background: linear-gradient(135deg, #334155, #1e293b);
+  color: #ffffff;
+  font: inherit;
+  font-weight: 700;
+}
+
+.saved-indicator {
+  margin-left: 0.45rem;
+  color: #22c55e;
+  font-weight: 700;
+  font-size: 0.82rem;
+}
+
 .quick-facts {
   margin-top: 0.45rem;
   display: flex;
@@ -514,6 +545,14 @@ pre {
   .grid,
   .grid.cols-1-2 {
     grid-template-columns: 1fr;
+  }
+
+  .my-recipe-main {
+    grid-template-columns: 1fr;
+  }
+
+  .my-recipe-actions {
+    justify-content: flex-start;
   }
 
   .page-wrap {

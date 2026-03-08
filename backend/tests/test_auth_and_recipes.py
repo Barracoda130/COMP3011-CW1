@@ -470,3 +470,88 @@ def test_suggested_recipes_uses_cache_until_new_rating(monkeypatch) -> None:
         third_suggested = client.get("/api/v1/recipes/suggested", headers=headers)
         assert third_suggested.status_code == 200
         assert call_counter["count"] > first_call_count
+
+
+def test_my_recipes_list_and_copy_edit_flow() -> None:
+    owner_email = f"owner-{uuid4().hex[:8]}@example.com"
+    editor_email = f"editor-{uuid4().hex[:8]}@example.com"
+    password = "StrongPass123"
+
+    with TestClient(app) as client:
+        owner_register = client.post(
+            "/api/v1/auth/register",
+            json={"email": owner_email, "password": password, "full_name": "Owner"},
+        )
+        assert owner_register.status_code == 201
+
+        editor_register = client.post(
+            "/api/v1/auth/register",
+            json={"email": editor_email, "password": password, "full_name": "Editor"},
+        )
+        assert editor_register.status_code == 201
+
+        owner_login = client.post(
+            "/api/v1/auth/login",
+            data={"username": owner_email, "password": password},
+        )
+        assert owner_login.status_code == 200
+        owner_headers = {"Authorization": f"Bearer {owner_login.json()['access_token']}"}
+
+        editor_login = client.post(
+            "/api/v1/auth/login",
+            data={"username": editor_email, "password": password},
+        )
+        assert editor_login.status_code == 200
+        editor_headers = {"Authorization": f"Bearer {editor_login.json()['access_token']}"}
+
+        create_response = client.post(
+            "/api/v1/recipes",
+            json={
+                "title": "Original Pasta",
+                "cuisine": "Italian",
+                "prep_minutes": 20,
+                "calories": 500,
+                "image_url": "data:image/png;base64,AAA",
+                "tags": ["pasta", "quick"],
+                "description": "Original description",
+            },
+            headers=owner_headers,
+        )
+        assert create_response.status_code == 201
+        original_recipe = create_response.json()
+        original_id = original_recipe["id"]
+
+        my_recipes_owner = client.get("/api/v1/recipes/mine", headers=owner_headers)
+        assert my_recipes_owner.status_code == 200
+        owner_titles = [item["title"] for item in my_recipes_owner.json()]
+        assert "Original Pasta" in owner_titles
+
+        my_recipes_editor_before = client.get("/api/v1/recipes/mine", headers=editor_headers)
+        assert my_recipes_editor_before.status_code == 200
+        assert my_recipes_editor_before.json() == []
+
+        copy_response = client.post(
+            f"/api/v1/recipes/{original_id}/copy",
+            json={
+                "title": "Original Pasta - My Version",
+                "description": "Tweaked version",
+                "tags": ["pasta", "custom"],
+            },
+            headers=editor_headers,
+        )
+        assert copy_response.status_code == 201
+        copied_recipe = copy_response.json()
+        assert copied_recipe["title"] == "Original Pasta - My Version"
+        assert copied_recipe["description"] == "Tweaked version"
+        assert copied_recipe["image_url"] == "data:image/png;base64,AAA"
+        assert copied_recipe["owner_id"] != original_recipe["owner_id"]
+
+        original_after_copy = client.get(f"/api/v1/recipes/{original_id}")
+        assert original_after_copy.status_code == 200
+        assert original_after_copy.json()["title"] == "Original Pasta"
+        assert original_after_copy.json()["description"] == "Original description"
+
+        my_recipes_editor_after = client.get("/api/v1/recipes/mine", headers=editor_headers)
+        assert my_recipes_editor_after.status_code == 200
+        editor_titles = [item["title"] for item in my_recipes_editor_after.json()]
+        assert "Original Pasta - My Version" in editor_titles

@@ -14,9 +14,37 @@ const form = ref({
   cuisine: "",
   prep_minutes: 20,
   calories: 500,
+  image_url: "",
   tags: "quick",
   description: ""
 });
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Failed to read image file"));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function onPhotoSelected(event) {
+  const file = event.target.files?.[0];
+  if (!file) {
+    return;
+  }
+
+  if (!file.type.startsWith("image/")) {
+    error.value = "Please upload a valid image file.";
+    return;
+  }
+
+  try {
+    form.value.image_url = await readFileAsDataUrl(file);
+  } catch (err) {
+    error.value = err.message;
+  }
+}
 
 async function createRecipe() {
   error.value = "";
@@ -29,6 +57,7 @@ async function createRecipe() {
       cuisine: form.value.cuisine.trim() || null,
       prep_minutes: Number(form.value.prep_minutes),
       calories: form.value.calories ? Number(form.value.calories) : null,
+      image_url: form.value.image_url || null,
       tags: form.value.tags
         .split(",")
         .map((tag) => tag.trim())
@@ -73,6 +102,9 @@ onUnmounted(() => {
       <input v-model="form.prep_minutes" type="number" min="1" />
       <label>Calories</label>
       <input v-model="form.calories" type="number" min="0" />
+      <label>Recipe Photo</label>
+      <input type="file" accept="image/*" @change="onPhotoSelected" />
+      <img v-if="form.image_url" :src="form.image_url" alt="Recipe preview" class="image-frame" />
       <label>Tags (comma separated)</label>
       <input v-model="form.tags" type="text" />
       <label>Description</label>

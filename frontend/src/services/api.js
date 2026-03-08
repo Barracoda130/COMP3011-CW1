@@ -90,6 +90,14 @@ export const api = {
   },
   me: () => request("/auth/me"),
   listRecipes: (skip = 0, limit = 20) => request(`/recipes?skip=${skip}&limit=${limit}`),
+  listMyRecipes: ({ query = "" } = {}) => {
+    const params = new URLSearchParams();
+    if (query && query.trim()) {
+      params.set("query", query.trim());
+    }
+    const suffix = params.toString();
+    return request(`/recipes/mine${suffix ? `?${suffix}` : ""}`);
+  },
   discoverRecipes: ({ query = "", localLimit = 50, externalLimit = 20 } = {}) => {
     const params = new URLSearchParams({
       query,
@@ -122,6 +130,7 @@ export const api = {
   getMyRecipeRating: (id) => request(`/recipes/${id}/ratings/me`),
   getMyThemealdbRating: (externalId) => request(`/recipes/themealdb/${externalId}/ratings/me`),
   updateRecipe: (id, payload) => request(`/recipes/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
+  copyRecipe: (id, payload) => request(`/recipes/${id}/copy`, { method: "POST", body: JSON.stringify(payload) }),
   deleteRecipe: (id) => request(`/recipes/${id}`, { method: "DELETE" }),
   rateRecipe: (id, payload) => request(`/recipes/${id}/ratings`, { method: "POST", body: JSON.stringify(payload) }),
   rateThemealdbRecipe: (externalId, payload) =>

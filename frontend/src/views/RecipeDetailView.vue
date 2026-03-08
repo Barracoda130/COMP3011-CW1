@@ -11,9 +11,9 @@ const router = useRouter();
 const recipe = ref(null);
 const error = ref("");
 const message = ref("");
-const editForm = ref({ title: "", cuisine: "", prep_minutes: 20, calories: 0, description: "", tags: "" });
-const rateForm = ref({ score: 5, comment: "" });
-const ratingResult = ref(null);
+const currentUser = ref(null);
+const editForm = ref({ title: "", cuisine: "", prep_minutes: 20, calories: 0, image_url: "", description: "", tags: "" });
+const isOwner = ref(false);
 
 function fillEditForm(data) {
   editForm.value = {
@@ -21,16 +21,47 @@ function fillEditForm(data) {
     cuisine: data.cuisine,
     prep_minutes: data.prep_minutes,
     calories: data.calories ?? 0,
+    image_url: data.image_url ?? "",
     description: data.description ?? "",
     tags: (data.tags || []).join(", ")
   };
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Failed to read image file"));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function onPhotoSelected(event) {
+  const file = event.target.files?.[0];
+  if (!file) {
+    return;
+  }
+
+  if (!file.type.startsWith("image/")) {
+    error.value = "Please upload a valid image file.";
+    return;
+  }
+
+  try {
+    editForm.value.image_url = await readFileAsDataUrl(file);
+  } catch (err) {
+    error.value = err.message;
+  }
 }
 
 async function loadRecipe() {
   error.value = "";
   message.value = "";
   try {
-    recipe.value = await api.getRecipe(props.id);
+    const [recipeData, meData] = await Promise.all([api.getRecipe(props.id), api.me()]);
+    recipe.value = recipeData;
+    currentUser.value = meData;
+    isOwner.value = Number(recipeData.owner_id) === Number(meData.id);
     fillEditForm(recipe.value);
   } catch (err) {
     error.value = err.message;
@@ -46,15 +77,20 @@ async function updateRecipe() {
       cuisine: editForm.value.cuisine,
       prep_minutes: Number(editForm.value.prep_minutes),
       calories: editForm.value.calories ? Number(editForm.value.calories) : null,
+      image_url: editForm.value.image_url || null,
       description: editForm.value.description || null,
       tags: editForm.value.tags
         .split(",")
         .map((tag) => tag.trim())
         .filter(Boolean)
     };
-    recipe.value = await api.updateRecipe(props.id, payload);
-    fillEditForm(recipe.value);
-    message.value = "Recipe updated";
+    if (isOwner.value) {
+      const updated = await api.updateRecipe(props.id, payload);
+      router.push({ path: "/recipes/mine", query: { updated: String(updated.id) } });
+    } else {
+      const copied = await api.copyRecipe(props.id, payload);
+      router.push({ path: "/recipes/mine", query: { updated: String(copied.id) } });
+    }
   } catch (err) {
     error.value = err.message;
   }
@@ -71,22 +107,6 @@ async function deleteRecipe() {
   }
 }
 
-async function rateRecipe() {
-  error.value = "";
-  message.value = "";
-  ratingResult.value = null;
-  try {
-    ratingResult.value = await api.rateRecipe(props.id, {
-      score: Number(rateForm.value.score),
-      comment: rateForm.value.comment || null
-    });
-    await loadRecipe();
-    message.value = "Rating saved";
-  } catch (err) {
-    error.value = err.message;
-  }
-}
-
 onMounted(loadRecipe);
 watch(() => props.id, loadRecipe);
 </script>
@@ -94,15 +114,14 @@ watch(() => props.id, loadRecipe);
 <template>
   <section class="grid">
     <article class="card stack">
-      <h2>Recipe Overview</h2>
+      <h2>{{ isOwner ? "Edit Recipe" : "Create Your Modified Copy" }}</h2>
+      <p class="small">
+        {{ isOwner
+          ? "You own this recipe. Saving updates will modify it directly."
+          : "You do not own this recipe. Saving will create a new modified copy under your account." }}
+      </p>
       <p v-if="error" class="error">{{ error }}</p>
       <p v-if="message" class="success">{{ message }}</p>
-      <pre v-if="recipe">{{ JSON.stringify(recipe, null, 2) }}</pre>
-    </article>
-
-    <article class="card stack">
-      <h2>Edit Recipe</h2>
-      <p class="small">Only the recipe owner can edit or delete this record.</p>
       <label>Title</label>
       <input v-model="editForm.title" type="text" />
       <label>Cuisine</label>
@@ -111,24 +130,17 @@ watch(() => props.id, loadRecipe);
       <input v-model="editForm.prep_minutes" type="number" min="1" />
       <label>Calories</label>
       <input v-model="editForm.calories" type="number" min="0" />
+      <label>Recipe Photo</label>
+      <input type="file" accept="image/*" @change="onPhotoSelected" />
+      <img v-if="editForm.image_url" :src="editForm.image_url" alt="Recipe preview" class="image-frame" />
       <label>Tags (comma separated)</label>
       <input v-model="editForm.tags" type="text" />
       <label>Description</label>
-      <textarea v-model="editForm.description" rows="3" />
+      <textarea v-model="editForm.description" rows="4" />
       <div class="button-row">
-        <button class="secondary" @click="updateRecipe">Save Changes</button>
-        <button class="danger" @click="deleteRecipe">Delete Recipe</button>
+        <button class="secondary" @click="updateRecipe">{{ isOwner ? "Save Changes" : "Save As My Copy" }}</button>
+        <button v-if="isOwner" class="danger" @click="deleteRecipe">Delete Recipe</button>
       </div>
-    </article>
-
-    <article class="card stack">
-      <h2>Rate Recipe</h2>
-      <label>Score (1-5)</label>
-      <input v-model="rateForm.score" type="number" min="1" max="5" />
-      <label>Comment</label>
-      <textarea v-model="rateForm.comment" rows="3" />
-      <button @click="rateRecipe">Submit Rating</button>
-      <pre v-if="ratingResult">{{ JSON.stringify(ratingResult, null, 2) }}</pre>
     </article>
   </section>
 </template>
