@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
     THEMEALDB_BASE_URL: str = "https://www.themealdb.com/api/json/v1/1"
+    SPOONACULAR_BASE_URL: str = "https://api.spoonacular.com"
+    SPOONACULAR_API_KEY: str | None = None
+    SHOPPING_API_BASE_URL: str = "https://dummyjson.com"
+    COST_ESTIMATOR_DEBUG: bool = False
 
 
 @lru_cache

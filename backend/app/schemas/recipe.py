@@ -1,3 +1,5 @@
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -45,6 +47,10 @@ class RecipeDiscoverItem(BaseModel):
     external_id: str | None = None
     category: str | None = None
     key_ingredients: list[str] = Field(default_factory=list)
+    estimated_cost: float | None = None
+    estimated_cost_currency: str | None = None
+    estimated_cost_confidence: str | None = None
+    estimated_cost_debug: dict[str, Any] | None = None
 
 
 class RecipeDiscoverResponse(BaseModel):
@@ -70,3 +76,7 @@ class RecipeCookRead(BaseModel):
     ingredients: list[RecipeCookIngredient] = Field(default_factory=list)
     prep_minutes: int | None = None
     calories: int | None = None
+    estimated_cost: float | None = None
+    estimated_cost_currency: str | None = None
+    estimated_cost_confidence: str | None = None
+    estimated_cost_debug: dict[str, Any] | None = None

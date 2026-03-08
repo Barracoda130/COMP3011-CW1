@@ -18,6 +18,18 @@ API will run at `http://127.0.0.1:8000` and docs at `http://127.0.0.1:8000/docs`
 - Users can upload their own recipes
 - Only recipe owners can update/delete their recipes
 - Users can rate recipes (one rating per user per recipe, re-rating updates score)
+- Recipe cost estimation from ingredients (Spoonacular first, fallback shopping API)
+
+## Cost Estimation Setup
+
+- Primary provider: Spoonacular ingredient cost data.
+- Fallback provider: generic shopping search API (`SHOPPING_API_BASE_URL`, defaults to DummyJSON).
+
+To enable Spoonacular, set in `.env`:
+
+- `SPOONACULAR_API_KEY=your_key_here`
+
+If no Spoonacular key is provided, the app will automatically use the fallback provider only.
 
 ## Quick API flow
 

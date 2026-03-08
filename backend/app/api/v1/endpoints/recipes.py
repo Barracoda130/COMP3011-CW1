@@ -19,6 +19,7 @@ from app.schemas.recipe import (
     RecipeUpdate,
 )
 from app.schemas.rating import RatingCreate, RatingRead
+from app.services.shopping import estimate_recipe_cost
 from app.services.themealdb import get_themealdb_recipe_by_id, search_themealdb_recipes
 
 router = APIRouter()
@@ -55,27 +56,57 @@ def discover_recipes(
         )
 
     local_recipes = local_query.limit(local_limit).all()
-    local_items = [
-        RecipeDiscoverItem(
-            id=recipe.id,
-            source="local",
-            title=recipe.title,
-            cuisine=_normalized_cuisine(recipe.cuisine),
-            image_url=None,
-            prep_minutes=recipe.prep_minutes,
-            calories=recipe.calories,
-            tags=recipe.tags,
-            description=recipe.description,
-            average_rating=recipe.average_rating,
-            owner_id=recipe.owner_id,
-            category=None,
-            key_ingredients=[],
+    local_items: list[RecipeDiscoverItem] = []
+    for recipe in local_recipes:
+        local_hints = recipe.tags if recipe.tags else recipe.title.split()[:3]
+        (
+            estimated_cost,
+            estimated_currency,
+            estimated_confidence,
+            estimated_debug,
+        ) = estimate_recipe_cost(local_hints)
+
+        local_items.append(
+            RecipeDiscoverItem(
+                id=recipe.id,
+                source="local",
+                title=recipe.title,
+                cuisine=_normalized_cuisine(recipe.cuisine),
+                image_url=None,
+                prep_minutes=recipe.prep_minutes,
+                calories=recipe.calories,
+                tags=recipe.tags,
+                description=recipe.description,
+                average_rating=recipe.average_rating,
+                owner_id=recipe.owner_id,
+                category=None,
+                key_ingredients=[],
+                estimated_cost=estimated_cost,
+                estimated_cost_currency=estimated_currency,
+                estimated_cost_confidence=estimated_confidence,
+                estimated_cost_debug=estimated_debug,
+            )
         )
-        for recipe in local_recipes
-    ]
 
     external_raw = search_themealdb_recipes(query=query.strip(), limit=external_limit)
-    external_items = [RecipeDiscoverItem(**item) for item in external_raw]
+    external_items: list[RecipeDiscoverItem] = []
+    for item in external_raw:
+        ingredient_hints = item.get("key_ingredients") or []
+        (
+            estimated_cost,
+            estimated_currency,
+            estimated_confidence,
+            estimated_debug,
+        ) = estimate_recipe_cost(ingredient_hints)
+        external_items.append(
+            RecipeDiscoverItem(
+                **item,
+                estimated_cost=estimated_cost,
+                estimated_cost_currency=estimated_currency,
+                estimated_cost_confidence=estimated_confidence,
+                estimated_cost_debug=estimated_debug,
+            )
+        )
 
     # Local recipes are intentionally prioritized ahead of external suggestions.
     combined_items = [*local_items, *external_items]
@@ -102,6 +133,14 @@ def get_recipe_for_cooking(
         if recipe is None:
             raise HTTPException(status_code=404, detail="Recipe not found")
 
+        local_hints = recipe.tags if recipe.tags else recipe.title.split()[:3]
+        (
+            estimated_cost,
+            estimated_currency,
+            estimated_confidence,
+            estimated_debug,
+        ) = estimate_recipe_cost(local_hints)
+
         return RecipeCookRead(
             id=recipe.id,
             source="local",
@@ -113,13 +152,43 @@ def get_recipe_for_cooking(
             ingredients=[],
             prep_minutes=recipe.prep_minutes,
             calories=recipe.calories,
+            estimated_cost=estimated_cost,
+            estimated_cost_currency=estimated_currency,
+            estimated_cost_confidence=estimated_confidence,
+            estimated_cost_debug=estimated_debug,
         )
 
     if normalized_source == "themealdb":
         external_recipe = get_themealdb_recipe_by_id(recipe_id)
         if external_recipe is None:
             raise HTTPException(status_code=404, detail="External recipe not found")
-        return RecipeCookRead(**external_recipe)
+
+        ingredient_names = [
+            ingredient.get("name", "")
+            for ingredient in external_recipe.get("ingredients") or []
+            if ingredient.get("name")
+        ]
+        ingredient_measures = {
+            ingredient.get("name", ""): ingredient.get("measure")
+            for ingredient in external_recipe.get("ingredients") or []
+            if ingredient.get("name")
+        }
+        (
+            estimated_cost,
+            estimated_currency,
+            estimated_confidence,
+            estimated_debug,
+        ) = estimate_recipe_cost(
+            ingredient_names,
+            ingredient_measures=ingredient_measures,
+        )
+        return RecipeCookRead(
+            **external_recipe,
+            estimated_cost=estimated_cost,
+            estimated_cost_currency=estimated_currency,
+            estimated_cost_confidence=estimated_confidence,
+            estimated_cost_debug=estimated_debug,
+        )
 
     raise HTTPException(status_code=400, detail="Invalid source. Use 'local' or 'themealdb'.")
 

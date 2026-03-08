@@ -141,6 +141,15 @@ watch(() => `${props.source}:${props.id}`, loadCookRecipe);
             <p class="small"><strong>Tags:</strong> {{ recipe.tags?.length ? recipe.tags.join(", ") : "No tags" }}</p>
             <p class="small">Prep: {{ recipe.prep_minutes ?? "N/A" }} mins</p>
             <p class="small">Calories: {{ recipe.calories ?? "N/A" }}</p>
+            <p class="small">
+              Estimated cost:
+              {{ recipe.estimated_cost !== null && recipe.estimated_cost !== undefined ? `${recipe.estimated_cost_currency || 'USD'} ${Number(recipe.estimated_cost).toFixed(2)}` : "N/A" }}
+            </p>
+            <p class="small">Cost confidence: {{ recipe.estimated_cost_confidence || "N/A" }}</p>
+            <details v-if="recipe.estimated_cost_debug" class="stack" style="margin-top: 0.4rem">
+              <summary class="small">Cost Debug</summary>
+              <pre>{{ JSON.stringify(recipe.estimated_cost_debug, null, 2) }}</pre>
+            </details>
           </article>
         </div>
 

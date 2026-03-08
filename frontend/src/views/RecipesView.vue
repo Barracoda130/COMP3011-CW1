@@ -33,6 +33,13 @@ function buildQuickFacts(recipe) {
   if (recipe.category) {
     facts.push(`Category: ${recipe.category}`);
   }
+  if (recipe.estimated_cost !== null && recipe.estimated_cost !== undefined) {
+    const currency = recipe.estimated_cost_currency || "USD";
+    facts.push(`Est. cost: ${currency} ${Number(recipe.estimated_cost).toFixed(2)}`);
+  }
+  if (recipe.estimated_cost_confidence) {
+    facts.push(`Cost confidence: ${recipe.estimated_cost_confidence}`);
+  }
   if (Array.isArray(recipe.tags) && recipe.tags.length) {
     facts.push(`Tags: ${recipe.tags.slice(0, 3).join(", ")}`);
   }
@@ -221,6 +228,10 @@ onUnmounted(() => {
                   {{ fact }}
                 </span>
               </div>
+              <details v-if="recipe.estimated_cost_debug" class="stack" style="margin-top: 0.5rem">
+                <summary class="small">Cost Debug</summary>
+                <pre>{{ JSON.stringify(recipe.estimated_cost_debug, null, 2) }}</pre>
+              </details>
             </div>
           </div>
         </li>
