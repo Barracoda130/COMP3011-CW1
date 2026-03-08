@@ -5,6 +5,8 @@
     "chat.tools.terminal.autoApprove": {
         ".\\backend\\.venv\\Scripts\\python.exe": true,
         "npm.cmd": true,
-        ".\\.venv\\Scripts\\python.exe": true
+        ".\\.venv\\Scripts\\python.exe": true,
+        "pytest": true,
+        "npm run build": true
     }
 }

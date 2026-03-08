@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { api } from "../services/api";
+import { isAuthenticated } from "../stores/auth";
 
 const props = defineProps({
   source: { type: String, required: true },
@@ -11,6 +12,16 @@ const props = defineProps({
 const recipe = ref(null);
 const error = ref("");
 const ingredientChecks = ref({});
+const ratingError = ref("");
+const ratingMessage = ref("");
+const ratingForm = ref({ score: null, comment: "" });
+const hoverScore = ref(null);
+const hasSubmittedRating = ref(false);
+
+const sourceType = computed(() => String(props.source).toLowerCase());
+const canRateCookedRecipe = computed(() => sourceType.value === "local" || sourceType.value === "themealdb");
+const isLoggedIn = computed(() => isAuthenticated());
+const previewedScore = computed(() => hoverScore.value ?? ratingForm.value.score ?? 0);
 
 function normalizeHeading(rawHeading) {
   const match = rawHeading.match(/(step|task)\s*(\d+)/i);
@@ -88,12 +99,104 @@ function resetIngredientChecklist() {
   ingredientChecks.value = {};
 }
 
+function resetRatingState() {
+  ratingError.value = "";
+  ratingMessage.value = "";
+  hasSubmittedRating.value = false;
+  hoverScore.value = null;
+  ratingForm.value = { score: null, comment: "" };
+}
+
+function selectStars(score) {
+  if (hasSubmittedRating.value) {
+    return;
+  }
+  ratingForm.value.score = score;
+}
+
+function previewStars(score) {
+  if (hasSubmittedRating.value) {
+    return;
+  }
+  hoverScore.value = score;
+}
+
+function clearPreviewStars() {
+  hoverScore.value = null;
+}
+
+async function loadExistingRating() {
+  if (!isLoggedIn.value || !canRateCookedRecipe.value) {
+    return;
+  }
+
+  try {
+    const existing =
+      sourceType.value === "themealdb"
+        ? await api.getMyThemealdbRating(String(props.id))
+        : await api.getMyRecipeRating(props.id);
+
+    ratingForm.value = {
+      score: existing.score,
+      comment: existing.comment ?? ""
+    };
+    hasSubmittedRating.value = true;
+    ratingMessage.value = "You already rated this recipe.";
+  } catch (err) {
+    if (err?.status === 404) {
+      return;
+    }
+    throw err;
+  }
+}
+
+async function submitRating() {
+  ratingError.value = "";
+  ratingMessage.value = "";
+
+  if (!canRateCookedRecipe.value) {
+    ratingError.value = "This recipe source cannot be rated right now.";
+    return;
+  }
+
+  if (!ratingForm.value.score) {
+    ratingError.value = "Please select a star rating first.";
+    return;
+  }
+
+  try {
+    const payload = {
+      score: Number(ratingForm.value.score),
+      comment: ratingForm.value.comment || null
+    };
+
+    if (sourceType.value === "themealdb") {
+      await api.rateThemealdbRecipe(String(props.id), payload);
+    } else {
+      await api.rateRecipe(props.id, payload);
+    }
+
+    hasSubmittedRating.value = true;
+    ratingMessage.value = "Rating submitted. You have already rated this recipe.";
+  } catch (err) {
+    ratingError.value = err.message;
+
+    if (typeof err.message === "string" && err.message.toLowerCase().includes("already rated")) {
+      hasSubmittedRating.value = true;
+      ratingMessage.value = "You have already rated this recipe.";
+      ratingError.value = "";
+    }
+  }
+}
+
 async function loadCookRecipe() {
   error.value = "";
   recipe.value = null;
   resetIngredientChecklist();
+  resetRatingState();
   try {
     recipe.value = await api.getCookRecipe(props.source, props.id);
+    await loadExistingRating();
   } catch (err) {
     error.value = err.message;
   }
@@ -141,6 +244,10 @@ watch(() => `${props.source}:${props.id}`, loadCookRecipe);
             <p class="small"><strong>Tags:</strong> {{ recipe.tags?.length ? recipe.tags.join(", ") : "No tags" }}</p>
             <p class="small">Prep: {{ recipe.prep_minutes ?? "N/A" }} mins</p>
             <p class="small">Calories: {{ recipe.calories ?? "N/A" }}</p>
+            <details v-if="recipe.estimated_cost_debug" class="stack" style="margin-top: 0.4rem">
+              <summary class="small">Cost Debug</summary>
+              <pre>{{ JSON.stringify(recipe.estimated_cost_debug, null, 2) }}</pre>
+            </details>
           </article>
         </div>
 
@@ -154,6 +261,44 @@ watch(() => `${props.source}:${props.id}`, loadCookRecipe);
             </article>
           </div>
           <p v-else class="small">No instructions available.</p>
+        </article>
+
+        <article v-if="canRateCookedRecipe" class="card stack">
+          <h3>Rate After Cooking</h3>
+          <p v-if="!isLoggedIn" class="small">
+            Log in to submit your rating.
+            <RouterLink to="/auth">Go to login</RouterLink>
+          </p>
+          <template v-else>
+            <label>Score</label>
+            <div
+              class="star-row"
+              role="radiogroup"
+              aria-label="Rate this recipe from 1 to 5 stars"
+              @mouseleave="clearPreviewStars"
+            >
+              <button
+                v-for="score in 5"
+                :key="score"
+                type="button"
+                class="star-btn"
+                :class="{ active: score <= (ratingForm.score ?? 0), preview: hoverScore !== null && score <= previewedScore }"
+                :disabled="hasSubmittedRating"
+                :aria-label="`${score} star${score > 1 ? 's' : ''}`"
+                @click="selectStars(score)"
+                @mouseenter="previewStars(score)"
+              >
+                ★
+              </button>
+            </div>
+            <p class="small">Selected: {{ ratingForm.score ?? 0 }}/5</p>
+            <label>{{ hasSubmittedRating ? "Comment" : "Comment" }}</label>
+            <textarea v-if="!hasSubmittedRating" v-model="ratingForm.comment" rows="3" />
+            <p v-else class="readonly-comment">{{ ratingForm.comment || "No comment provided." }}</p>
+            <button v-if="!hasSubmittedRating" @click="submitRating">Submit Rating</button>
+            <p v-if="ratingError" class="error">{{ ratingError }}</p>
+            <p v-if="ratingMessage" class="success rating-success">{{ ratingMessage }}</p>
+          </template>
         </article>
       </section>
     </template>

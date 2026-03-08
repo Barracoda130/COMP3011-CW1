@@ -68,6 +68,7 @@ async function request(path, options = {}) {
   if (!response.ok) {
     const formatted = formatApiError(response.status, data.detail);
     const error = new Error(formatted.message);
+    error.status = response.status;
     error.fieldErrors = formatted.fieldErrors;
     throw error;
   }
@@ -100,7 +101,11 @@ export const api = {
   createRecipe: (payload) => request("/recipes", { method: "POST", body: JSON.stringify(payload) }),
   getRecipe: (id) => request(`/recipes/${id}`),
   getCookRecipe: (source, id) => request(`/recipes/cook/${source}/${id}`),
+  getMyRecipeRating: (id) => request(`/recipes/${id}/ratings/me`),
+  getMyThemealdbRating: (externalId) => request(`/recipes/themealdb/${externalId}/ratings/me`),
   updateRecipe: (id, payload) => request(`/recipes/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   deleteRecipe: (id) => request(`/recipes/${id}`, { method: "DELETE" }),
-  rateRecipe: (id, payload) => request(`/recipes/${id}/ratings`, { method: "POST", body: JSON.stringify(payload) })
+  rateRecipe: (id, payload) => request(`/recipes/${id}/ratings`, { method: "POST", body: JSON.stringify(payload) }),
+  rateThemealdbRecipe: (externalId, payload) =>
+    request(`/recipes/themealdb/${externalId}/ratings`, { method: "POST", body: JSON.stringify(payload) })
 };

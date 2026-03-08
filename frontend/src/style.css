@@ -308,6 +308,54 @@ a {
   font-weight: 700;
 }
 
+.rating-success {
+  background: #0f2f24;
+  border: 1px solid #1f5a46;
+  border-radius: 10px;
+  padding: 0.55rem 0.7rem;
+}
+
+.star-row {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin-bottom: 0.25rem;
+}
+
+.star-btn {
+  border: 0;
+  background: transparent;
+  color: #4b5d85;
+  font-size: 1.5rem;
+  line-height: 1;
+  padding: 0.1rem 0.2rem;
+  cursor: pointer;
+}
+
+.star-btn.active {
+  color: #f59e0b;
+}
+
+.star-btn.preview {
+  color: #f4c56b;
+}
+
+.star-btn:disabled {
+  cursor: default;
+  opacity: 0.85;
+}
+
+.readonly-comment {
+  margin: 0;
+  padding: 0.55rem 0.7rem;
+  background: #1b253f;
+  border: 1px solid #3a496f;
+  border-radius: 10px;
+  color: #d7e2ff;
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
 pre {
   overflow-x: auto;
   background: #11182e;

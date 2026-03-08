@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.db.session import get_db
+from app.models.external_rating import ExternalRecipeRating
 from app.models.rating import RecipeRating
 from app.models.recipe import Recipe
 from app.models.user import User
@@ -18,7 +19,7 @@ from app.schemas.recipe import (
     RecipeRead,
     RecipeUpdate,
 )
-from app.schemas.rating import RatingCreate, RatingRead
+from app.schemas.rating import ExternalRatingRead, RatingCreate, RatingRead
 from app.services.themealdb import get_themealdb_recipe_by_id, search_themealdb_recipes
 
 router = APIRouter()
@@ -206,18 +207,16 @@ def rate_recipe(
         .first()
     )
 
-    if existing is None:
-        rating = RecipeRating(
-            user_id=current_user.id,
-            recipe_id=recipe_id,
-            score=payload.score,
-            comment=payload.comment,
-        )
-        db.add(rating)
-    else:
-        existing.score = payload.score
-        existing.comment = payload.comment
-        rating = existing
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="You have already rated this recipe")
+
+    rating = RecipeRating(
+        user_id=current_user.id,
+        recipe_id=recipe_id,
+        score=payload.score,
+        comment=payload.comment,
+    )
+    db.add(rating)
 
     db.flush()
 
@@ -228,4 +227,82 @@ def rate_recipe(
 
     db.commit()
     db.refresh(rating)
+    return rating
+
+
+@router.get("/{recipe_id}/ratings/me", response_model=RatingRead)
+def get_my_recipe_rating(
+    recipe_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RecipeRating:
+    rating = (
+        db.query(RecipeRating)
+        .filter(RecipeRating.user_id == current_user.id, RecipeRating.recipe_id == recipe_id)
+        .first()
+    )
+    if rating is None:
+        raise HTTPException(status_code=404, detail="No rating found for this recipe")
+    return rating
+
+
+@router.post("/themealdb/{external_recipe_id}/ratings", response_model=ExternalRatingRead)
+def rate_external_themealdb_recipe(
+    external_recipe_id: str,
+    payload: RatingCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ExternalRecipeRating:
+    normalized_id = external_recipe_id.strip()
+    if not normalized_id.isdigit():
+        raise HTTPException(status_code=400, detail="TheMealDB recipe id must be a numeric string")
+
+    existing = (
+        db.query(ExternalRecipeRating)
+        .filter(
+            ExternalRecipeRating.user_id == current_user.id,
+            ExternalRecipeRating.external_recipe_id == normalized_id,
+            ExternalRecipeRating.source == "themealdb",
+        )
+        .first()
+    )
+
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="You have already rated this TheMealDB recipe")
+
+    rating = ExternalRecipeRating(
+        user_id=current_user.id,
+        external_recipe_id=normalized_id,
+        source="themealdb",
+        score=payload.score,
+        comment=payload.comment,
+    )
+    db.add(rating)
+
+    db.commit()
+    db.refresh(rating)
+    return rating
+
+
+@router.get("/themealdb/{external_recipe_id}/ratings/me", response_model=ExternalRatingRead)
+def get_my_themealdb_recipe_rating(
+    external_recipe_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ExternalRecipeRating:
+    normalized_id = external_recipe_id.strip()
+    if not normalized_id.isdigit():
+        raise HTTPException(status_code=400, detail="TheMealDB recipe id must be a numeric string")
+
+    rating = (
+        db.query(ExternalRecipeRating)
+        .filter(
+            ExternalRecipeRating.user_id == current_user.id,
+            ExternalRecipeRating.external_recipe_id == normalized_id,
+            ExternalRecipeRating.source == "themealdb",
+        )
+        .first()
+    )
+    if rating is None:
+        raise HTTPException(status_code=404, detail="No rating found for this TheMealDB recipe")
     return rating

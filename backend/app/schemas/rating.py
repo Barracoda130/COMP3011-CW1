@@ -14,3 +14,14 @@ class RatingRead(BaseModel):
     comment: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+class ExternalRatingRead(BaseModel):
+    id: int
+    user_id: int
+    external_recipe_id: str
+    source: str
+    score: int
+    comment: str | None = None
+
+    model_config = {"from_attributes": True}

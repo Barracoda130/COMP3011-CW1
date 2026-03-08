@@ -17,3 +17,6 @@ class User(Base):
 
     recipes = relationship("Recipe", back_populates="owner", cascade="all, delete-orphan")
     ratings = relationship("RecipeRating", back_populates="user", cascade="all, delete-orphan")
+    external_ratings = relationship(
+        "ExternalRecipeRating", back_populates="user", cascade="all, delete-orphan"
+    )
