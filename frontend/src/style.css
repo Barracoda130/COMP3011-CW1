@@ -135,6 +135,7 @@ body {
 
 .grid.cols-1-2 {
   grid-template-columns: minmax(240px, 1fr) minmax(420px, 2fr);
+  align-items: start;
 }
 
 .card {

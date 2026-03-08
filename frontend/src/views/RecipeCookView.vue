@@ -35,6 +35,13 @@ const showDescriptionAboveSteps = computed(() => {
   const description = String(recipe.value?.description || "").trim();
   const instructions = String(recipe.value?.instructions || "").trim();
   if (!description) return false;
+
+  // ThemealDB description is often just a one-word category (e.g., "Chicken").
+  const descriptionWordCount = description.split(/\s+/).filter(Boolean).length;
+  if (sourceType.value === "themealdb" && descriptionWordCount <= 2) {
+    return false;
+  }
+
   if (!instructions) return true;
   return description !== instructions;
 });
