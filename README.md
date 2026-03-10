@@ -2,6 +2,26 @@
 
 Full-stack recipe application built with a FastAPI backend and a Vue 3 frontend.
 
+## Scope (MVP vs Stretch)
+
+### MVP (submission-critical)
+
+- Authentication and protected recipe actions
+- CRUD for local recipes
+- Discover + cook flows for local and external recipes
+- Ratings for local and external recipes
+- Suggested recipes based on user rating history
+- Import from URL into structured recipe fields (`intro`, `ingredients`, `steps`)
+- Automated tests and runnable local setup
+
+### Stretch (time permitting)
+
+- Weekly plan generation with day-level constraints
+- Stronger taste-profile learning (prep-time/calorie bands + richer ingredient preferences)
+- Explainable recommendation reasons in API responses and UI
+- Video import (captions-first, manual transcript fallback)
+- Formal migration workflow (Alembic) replacing startup schema patching
+
 ## Overview
 
 The project provides:
@@ -17,6 +37,16 @@ The project provides:
 
 - Backend: FastAPI, SQLAlchemy, Pydantic, SQLite (default), pytest
 - Frontend: Vue 3, Vue Router, Vite, Vitest
+
+## Submission Database Strategy
+
+- Locked strategy for this submission: **SQLite** as the primary database.
+Why this choice:
+
+- It is already integrated and stable in the current codebase.
+- It minimizes setup friction for local marking/demo environments.
+- It keeps focus on coursework features (recommendation, planning, testing, docs) instead of deployment/database operations.
+- PostgreSQL remains a documented future upgrade path after feature completion.
 
 ## Project Structure
 
@@ -118,6 +148,20 @@ npm run build
 - Tables are created on startup
 - `backend/app/db/init_db.py` also applies lightweight schema backfills for incremental changes
 - Legacy recipe text in `description` is backfilled into `steps` on startup
+
+## Target Data Model Changes
+
+Target additions for next phases:
+
+- `weekly_plans` table for per-user generated plans.
+- `weekly_plan_items` table for day-level plan entries and ordering.
+- `taste_profiles` (or `user_preference_snapshots`) for persisted preference signals.
+- `recommendation_reasons` payload support in suggested results (stored or computed).
+
+Current recipe model direction:
+
+- Keep `recipes` with `intro`, `steps`, `ingredients`, and `tags`.
+- Continue to evaluate normalization (`ingredients` and `tags`) as a post-MVP enhancement.
 
 ## Database Schema
 
