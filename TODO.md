@@ -8,10 +8,10 @@
 
 ## Phase 2: Schema Safety and Migration Discipline
 
-- [ ] Add Alembic and create baseline migration setup.
-- [ ] Add migrations for existing recent changes (`steps`, `intro`, `ingredients`).
-- [ ] Add migrations for upcoming weekly-planning tables.
-- [ ] Reduce startup schema patching in `init_db.py` once migrations are the source of truth.
+- [x] Add Alembic and create baseline migration setup.
+- [x] Add migrations for existing recent changes (`steps`, `intro`, `ingredients`).
+- [x] Add migrations for upcoming weekly-planning tables.
+- [x] Reduce startup schema patching in `init_db.py` once migrations are the source of truth.
 
 ## Phase 3: Core Feature Gap (Highest Mark Impact)
 

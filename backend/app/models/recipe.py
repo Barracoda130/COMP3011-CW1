@@ -25,3 +25,4 @@ class Recipe(Base):
 
     owner = relationship("User", back_populates="recipes")
     ratings = relationship("RecipeRating", back_populates="recipe", cascade="all, delete-orphan")
+    weekly_plan_items = relationship("WeeklyPlanItem", back_populates="recipe")
