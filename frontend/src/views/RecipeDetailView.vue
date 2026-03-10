@@ -12,7 +12,17 @@ const recipe = ref(null);
 const error = ref("");
 const message = ref("");
 const currentUser = ref(null);
-const editForm = ref({ title: "", cuisine: "", prep_minutes: 20, calories: 0, image_url: "", description: "", tags: "" });
+const editForm = ref({
+  title: "",
+  cuisine: "",
+  prep_minutes: 20,
+  calories: 0,
+  intro: "",
+  image_url: "",
+  ingredients: "",
+  steps: "",
+  tags: ""
+});
 const isOwner = ref(false);
 
 function fillEditForm(data) {
@@ -21,8 +31,10 @@ function fillEditForm(data) {
     cuisine: data.cuisine,
     prep_minutes: data.prep_minutes,
     calories: data.calories ?? 0,
+    intro: data.intro ?? "",
     image_url: data.image_url ?? "",
-    description: data.description ?? "",
+    ingredients: (data.ingredients || []).join("\n"),
+    steps: data.steps ?? "",
     tags: (data.tags || []).join(", ")
   };
 }
@@ -77,8 +89,13 @@ async function updateRecipe() {
       cuisine: editForm.value.cuisine,
       prep_minutes: Number(editForm.value.prep_minutes),
       calories: editForm.value.calories ? Number(editForm.value.calories) : null,
+      intro: editForm.value.intro || null,
       image_url: editForm.value.image_url || null,
-      description: editForm.value.description || null,
+      ingredients: editForm.value.ingredients
+        .split("\n")
+        .map((ingredient) => ingredient.trim())
+        .filter(Boolean),
+      steps: editForm.value.steps || null,
       tags: editForm.value.tags
         .split(",")
         .map((tag) => tag.trim())
@@ -130,13 +147,17 @@ watch(() => props.id, loadRecipe);
       <input v-model="editForm.prep_minutes" type="number" min="1" />
       <label>Calories</label>
       <input v-model="editForm.calories" type="number" min="0" />
+      <label>Intro (optional)</label>
+      <textarea v-model="editForm.intro" rows="3" />
       <label>Recipe Photo</label>
       <input type="file" accept="image/*" @change="onPhotoSelected" />
       <img v-if="editForm.image_url" :src="editForm.image_url" alt="Recipe preview" class="image-frame" />
+      <label>Ingredients (one per line)</label>
+      <textarea v-model="editForm.ingredients" rows="6" />
       <label>Tags (comma separated)</label>
       <input v-model="editForm.tags" type="text" />
-      <label>Description</label>
-      <textarea v-model="editForm.description" rows="4" />
+      <label>Steps</label>
+      <textarea v-model="editForm.steps" rows="4" />
       <div class="button-row">
         <button class="secondary" @click="updateRecipe">{{ isOwner ? "Save Changes" : "Save As My Copy" }}</button>
         <button v-if="isOwner" class="danger" @click="deleteRecipe">Delete Recipe</button>

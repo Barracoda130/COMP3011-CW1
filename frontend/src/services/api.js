@@ -124,6 +124,11 @@ export const api = {
     const suffix = params.toString();
     return request(`/recipes/rated${suffix ? `?${suffix}` : ""}`);
   },
+  importRecipeFromUrl: (url) =>
+    request("/recipes/import-url", {
+      method: "POST",
+      body: JSON.stringify({ url })
+    }),
   createRecipe: (payload) => request("/recipes", { method: "POST", body: JSON.stringify(payload) }),
   getRecipe: (id) => request(`/recipes/${id}`),
   getCookRecipe: (source, id) => request(`/recipes/cook/${source}/${id}`),

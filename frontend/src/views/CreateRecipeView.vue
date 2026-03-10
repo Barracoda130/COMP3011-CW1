@@ -8,15 +8,20 @@ const router = useRouter();
 const error = ref("");
 const created = ref(null);
 const successMessage = ref("");
+const importUrl = ref("");
+const importMessage = ref("");
+const importing = ref(false);
 let redirectTimer = null;
 const form = ref({
   title: "",
   cuisine: "",
   prep_minutes: 20,
   calories: 500,
+  intro: "",
   image_url: "",
+  ingredients: "",
   tags: "quick",
-  description: ""
+  steps: ""
 });
 
 function readFileAsDataUrl(file) {
@@ -57,12 +62,17 @@ async function createRecipe() {
       cuisine: form.value.cuisine.trim() || null,
       prep_minutes: Number(form.value.prep_minutes),
       calories: form.value.calories ? Number(form.value.calories) : null,
+      intro: form.value.intro || null,
       image_url: form.value.image_url || null,
+      ingredients: form.value.ingredients
+        .split("\n")
+        .map((ingredient) => ingredient.trim())
+        .filter(Boolean),
       tags: form.value.tags
         .split(",")
         .map((tag) => tag.trim())
         .filter(Boolean),
-      description: form.value.description || null
+      steps: form.value.steps || null
     };
     created.value = await api.createRecipe(payload);
     successMessage.value = "Recipe created successfully. Redirecting to Discover...";
@@ -76,6 +86,38 @@ async function createRecipe() {
     }, 1200);
   } catch (err) {
     error.value = err.message;
+  }
+}
+
+async function importFromUrl() {
+  error.value = "";
+  importMessage.value = "";
+
+  const normalizedUrl = importUrl.value.trim();
+  if (!normalizedUrl) {
+    error.value = "Please paste a recipe URL to import.";
+    return;
+  }
+
+  importing.value = true;
+  try {
+    const preview = await api.importRecipeFromUrl(normalizedUrl);
+    form.value.title = preview.title || form.value.title;
+    form.value.cuisine = preview.cuisine || "";
+    form.value.prep_minutes = preview.prep_minutes || form.value.prep_minutes || 20;
+    form.value.calories = preview.calories ?? form.value.calories;
+    form.value.intro = preview.intro || form.value.intro;
+    form.value.image_url = preview.image_url || form.value.image_url;
+    form.value.ingredients = Array.isArray(preview.ingredients)
+      ? preview.ingredients.join("\n")
+      : form.value.ingredients;
+    form.value.tags = Array.isArray(preview.tags) ? preview.tags.join(", ") : form.value.tags;
+    form.value.steps = preview.steps || form.value.steps;
+    importMessage.value = "Recipe details imported. Review and edit before creating.";
+  } catch (err) {
+    error.value = err.message;
+  } finally {
+    importing.value = false;
   }
 }
 
@@ -94,6 +136,15 @@ onUnmounted(() => {
         <RouterLink class="muted-link" to="/recipes">Back to Discover Recipes</RouterLink>
       </div>
 
+      <label>Import From URL</label>
+      <div class="button-row">
+        <input v-model="importUrl" type="url" placeholder="https://example.com/recipe" />
+        <button type="button" class="secondary" :disabled="importing" @click="importFromUrl">
+          {{ importing ? "Importing..." : "Import Recipe" }}
+        </button>
+      </div>
+      <p v-if="importMessage" class="small">{{ importMessage }}</p>
+
       <label>Title</label>
       <input v-model="form.title" type="text" />
       <label>Cuisine (optional)</label>
@@ -102,13 +153,17 @@ onUnmounted(() => {
       <input v-model="form.prep_minutes" type="number" min="1" />
       <label>Calories</label>
       <input v-model="form.calories" type="number" min="0" />
+      <label>Intro (optional)</label>
+      <textarea v-model="form.intro" rows="3" placeholder="Short context before instructions..." />
       <label>Recipe Photo</label>
       <input type="file" accept="image/*" @change="onPhotoSelected" />
       <img v-if="form.image_url" :src="form.image_url" alt="Recipe preview" class="image-frame" />
+      <label>Ingredients (one per line)</label>
+      <textarea v-model="form.ingredients" rows="6" placeholder="2 eggs&#10;1 cup flour&#10;1 tsp salt" />
       <label>Tags (comma separated)</label>
       <input v-model="form.tags" type="text" />
-      <label>Description</label>
-      <textarea v-model="form.description" rows="4" />
+      <label>Steps</label>
+      <textarea v-model="form.steps" rows="4" />
       <button @click="createRecipe">Create Recipe</button>
 
       <p v-if="error" class="error">{{ error }}</p>

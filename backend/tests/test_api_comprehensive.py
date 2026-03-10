@@ -31,7 +31,7 @@ def _create_recipe(client: TestClient, headers: dict[str, str], title: str = "Pr
             "prep_minutes": 25,
             "calories": 600,
             "tags": ["quick", "pasta"],
-            "description": "Simple instructions",
+            "steps": "Simple instructions",
         },
         headers=headers,
     )
@@ -54,9 +54,10 @@ def test_unauthorized_access_to_protected_endpoints() -> None:
                 "prep_minutes": 20,
                 "calories": 500,
                 "tags": ["test"],
-                "description": "No token",
+                "steps": "No token",
             },
         ),
+        ("post", "/api/v1/recipes/import-url", {"url": "https://example.com/recipe"}),
         ("post", "/api/v1/recipes/1/copy", {"title": "Copy attempt"}),
         ("put", "/api/v1/recipes/1", {"title": "Update attempt"}),
         ("delete", "/api/v1/recipes/1", None),
@@ -120,13 +121,22 @@ def test_recipe_create_validation_and_public_listing() -> None:
                 "cuisine": "",
                 "prep_minutes": 15,
                 "calories": 450,
+                "ingredients": ["2 eggs", "1 cup flour"],
                 "tags": ["quick"],
-                "description": "A valid recipe",
+                "steps": "A valid recipe",
             },
             headers=headers,
         )
         assert create_response.status_code == 201
         assert create_response.json()["cuisine"] == "Unknown"
+        assert create_response.json()["ingredients"] == ["2 eggs", "1 cup flour"]
+
+        cook_response = client.get(f"/api/v1/recipes/cook/local/{create_response.json()['id']}")
+        assert cook_response.status_code == 200
+        assert cook_response.json()["ingredients"] == [
+            {"name": "2 eggs", "measure": None},
+            {"name": "1 cup flour", "measure": None},
+        ]
 
         invalid_prep_response = client.post(
             "/api/v1/recipes",
@@ -136,7 +146,7 @@ def test_recipe_create_validation_and_public_listing() -> None:
                 "prep_minutes": 0,
                 "calories": 300,
                 "tags": ["bad"],
-                "description": "Invalid prep",
+                "steps": "Invalid prep",
             },
             headers=headers,
         )
@@ -150,7 +160,7 @@ def test_recipe_create_validation_and_public_listing() -> None:
                 "prep_minutes": 10,
                 "calories": 300,
                 "tags": ["bad"],
-                "description": "Invalid title",
+                "steps": "Invalid title",
             },
             headers=headers,
         )
@@ -164,7 +174,7 @@ def test_recipe_create_validation_and_public_listing() -> None:
                 "prep_minutes": 10,
                 "calories": -1,
                 "tags": ["bad"],
-                "description": "Invalid calories",
+                "steps": "Invalid calories",
             },
             headers=headers,
         )
@@ -325,6 +335,52 @@ def test_themealdb_rating_validation_and_lookup() -> None:
         missing_external_rating = client.get("/api/v1/recipes/themealdb/99999/ratings/me", headers=headers)
         assert missing_external_rating.status_code == 404
 
+
+def test_recipe_import_url_success_and_parse_failure(monkeypatch) -> None:
+    email = f"test-{uuid4().hex[:8]}@example.com"
+
+    with TestClient(app) as client:
+        headers = _register_and_login(client, email)
+
+        def _fake_extract_success(_url: str) -> dict[str, object]:
+            return {
+                "title": "Imported Curry",
+                "cuisine": "Indian",
+                "prep_minutes": 45,
+                "calories": None,
+                "image_url": "https://example.com/curry.jpg",
+                "ingredients": ["1 onion", "2 tomatoes"],
+                "tags": ["curry", "spicy"],
+                "steps": "Imported description",
+                "source_url": "https://example.com/curry",
+            }
+
+        monkeypatch.setattr(recipes_endpoints, "extract_recipe_from_url", _fake_extract_success)
+
+        success = client.post(
+            "/api/v1/recipes/import-url",
+            json={"url": "https://example.com/curry"},
+            headers=headers,
+        )
+        assert success.status_code == 200
+        body = success.json()
+        assert body["title"] == "Imported Curry"
+        assert body["prep_minutes"] == 45
+        assert body["ingredients"] == ["1 onion", "2 tomatoes"]
+        assert body["source_url"] == "https://example.com/curry"
+
+        def _fake_extract_failure(_url: str) -> dict[str, object]:
+            raise recipes_endpoints.RecipeImportError("Could not parse recipe data from this URL")
+
+        monkeypatch.setattr(recipes_endpoints, "extract_recipe_from_url", _fake_extract_failure)
+
+        failure = client.post(
+            "/api/v1/recipes/import-url",
+            json={"url": "https://example.com/no-recipe"},
+            headers=headers,
+        )
+        assert failure.status_code == 400
+        assert failure.json()["detail"] == "Could not parse recipe data from this URL"
 
 def test_discover_suggested_and_rated_query_validation(monkeypatch) -> None:
     email = f"test-{uuid4().hex[:8]}@example.com"

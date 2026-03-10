@@ -113,4 +113,24 @@ describe("services/api", () => {
     expect(url).toContain("query=pasta");
     expect(url).toContain("score=5");
   });
+
+  it("sends import URL payload to recipe import endpoint", async () => {
+    const { getToken } = await import("../stores/auth");
+    getToken.mockReturnValue("abc-token");
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ title: "Imported" })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { api } = await import("./api");
+    await api.importRecipeFromUrl("https://example.com/recipe");
+
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(url).toBe("http://127.0.0.1:8000/api/v1/recipes/import-url");
+    expect(options.method).toBe("POST");
+    expect(options.body).toBe(JSON.stringify({ url: "https://example.com/recipe" }));
+  });
 });

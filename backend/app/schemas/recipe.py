@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl
 
 
 class RecipeBase(BaseModel):
@@ -6,9 +6,11 @@ class RecipeBase(BaseModel):
     cuisine: str | None = Field(default=None, max_length=60)
     prep_minutes: int = Field(ge=1, le=600)
     calories: int | None = Field(default=None, ge=0)
+    intro: str | None = None
     image_url: str | None = Field(default=None, max_length=1_000_000)
+    ingredients: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
-    description: str | None = None
+    steps: str | None = None
 
 
 class RecipeCreate(RecipeBase):
@@ -20,9 +22,11 @@ class RecipeUpdate(BaseModel):
     cuisine: str | None = Field(default=None, max_length=60)
     prep_minutes: int | None = Field(default=None, ge=1, le=600)
     calories: int | None = Field(default=None, ge=0)
+    intro: str | None = None
     image_url: str | None = Field(default=None, max_length=1_000_000)
+    ingredients: list[str] | None = None
     tags: list[str] | None = None
-    description: str | None = None
+    steps: str | None = None
 
 
 class RecipeRead(RecipeBase):
@@ -92,3 +96,20 @@ class RecipeCookRead(BaseModel):
     ingredients: list[RecipeCookIngredient] = Field(default_factory=list)
     prep_minutes: int | None = None
     calories: int | None = None
+
+
+class RecipeImportRequest(BaseModel):
+    url: HttpUrl
+
+
+class RecipeImportPreview(BaseModel):
+    title: str
+    cuisine: str | None = None
+    prep_minutes: int | None = None
+    calories: int | None = None
+    intro: str | None = None
+    image_url: str | None = None
+    ingredients: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    steps: str | None = None
+    source_url: str

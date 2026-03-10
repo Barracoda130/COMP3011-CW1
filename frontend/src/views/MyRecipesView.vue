@@ -11,7 +11,7 @@ const isLoading = ref(false);
 const error = ref("");
 const updatedRecipeId = ref(null);
 
-function descriptionPreview(text) {
+function stepsPreview(text) {
   if (!text) return "";
   const normalized = String(text).trim();
   if (normalized.length <= 140) {
@@ -110,7 +110,7 @@ watch(() => route.query.updated, syncUpdatedRecipeIdFromRoute);
                     Calories: {{ recipe.calories }}
                   </span>
                 </div>
-                <p v-if="recipe.description" class="small" style="margin-top: 0.4rem">{{ descriptionPreview(recipe.description) }}</p>
+                <p v-if="recipe.intro || recipe.steps" class="small" style="margin-top: 0.4rem">{{ stepsPreview(recipe.intro || recipe.steps) }}</p>
               </div>
               <div class="my-recipe-actions">
                 <RouterLink class="action-link secondary" :to="`/recipes/${recipe.id}`">Edit</RouterLink>

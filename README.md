@@ -117,6 +117,7 @@ npm run build
 - Default DB is SQLite at `backend/meal_api.db`
 - Tables are created on startup
 - `backend/app/db/init_db.py` also applies lightweight schema backfills for incremental changes
+- Legacy recipe text in `description` is backfilled into `steps` on startup
 
 ## Database Schema
 
@@ -138,8 +139,9 @@ npm run build
 - `cuisine` (indexed)
 - `prep_minutes`
 - `calories`
-- `description`
+- `steps`
 - `image_url`
+- `ingredients` (JSON)
 - `tags` (JSON)
 - `average_rating`
 - `created_at`

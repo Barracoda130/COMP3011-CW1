@@ -20,6 +20,8 @@ from app.schemas.recipe import (
     RecipeCreate,
     RecipeDiscoverItem,
     RecipeDiscoverResponse,
+    RecipeImportPreview,
+    RecipeImportRequest,
     RecipeRatedItem,
     RecipeRatedResponse,
     RecipeRead,
@@ -27,6 +29,7 @@ from app.schemas.recipe import (
     RecipeUpdate,
 )
 from app.schemas.rating import ExternalRatingRead, RatingCreate, RatingRead
+from app.services.recipe_import import RecipeImportError, extract_recipe_from_url
 from app.services.themealdb import get_themealdb_recipe_by_id, search_themealdb_recipes
 
 router = APIRouter()
@@ -206,7 +209,7 @@ def discover_recipes(
             prep_minutes=recipe.prep_minutes,
             calories=recipe.calories,
             tags=recipe.tags,
-            description=recipe.description,
+            description=recipe.intro or recipe.steps,
             average_rating=recipe.average_rating,
             owner_id=recipe.owner_id,
             category=None,
@@ -248,11 +251,11 @@ def get_recipe_for_cooking(
             source="local",
             title=recipe.title,
             cuisine=_normalized_cuisine(recipe.cuisine),
-            description=recipe.description,
-            instructions=recipe.description,
+            description=recipe.intro,
+            instructions=recipe.steps,
             image_url=recipe.image_url,
             tags=recipe.tags,
-            ingredients=[],
+            ingredients=[RecipeCookIngredient(name=item, measure=None) for item in (recipe.ingredients or [])],
             prep_minutes=recipe.prep_minutes,
             calories=recipe.calories,
         )
@@ -399,7 +402,7 @@ def suggested_recipes_for_user(
                 prep_minutes=recipe.prep_minutes,
                 calories=recipe.calories,
                 tags=recipe.tags,
-                description=recipe.description,
+                description=recipe.intro or recipe.steps,
                 average_rating=recipe.average_rating,
                 owner_id=recipe.owner_id,
                 category=None,
@@ -536,7 +539,7 @@ def get_my_rated_recipes(
                 prep_minutes=recipe.prep_minutes,
                 calories=recipe.calories,
                 tags=recipe.tags,
-                description=recipe.description,
+                description=recipe.intro or recipe.steps,
                 average_rating=recipe.average_rating,
                 owner_id=recipe.owner_id,
                 category=None,
@@ -615,6 +618,19 @@ def create_recipe(
     return recipe
 
 
+@router.post("/import-url", response_model=RecipeImportPreview)
+def import_recipe_from_url(
+    payload: RecipeImportRequest,
+    current_user: User = Depends(get_current_user),
+) -> RecipeImportPreview:
+    del current_user
+    try:
+        preview = extract_recipe_from_url(str(payload.url))
+        return RecipeImportPreview(**preview)
+    except RecipeImportError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.post("/{recipe_id}/copy", response_model=RecipeRead, status_code=201)
 def create_modified_recipe_copy(
     recipe_id: int,
@@ -634,9 +650,11 @@ def create_modified_recipe_copy(
         cuisine=_normalized_cuisine(overrides.get("cuisine", source_recipe.cuisine)),
         prep_minutes=overrides.get("prep_minutes", source_recipe.prep_minutes),
         calories=overrides.get("calories", source_recipe.calories),
+        intro=overrides.get("intro", source_recipe.intro),
         image_url=overrides.get("image_url", source_recipe.image_url),
+        ingredients=overrides.get("ingredients", source_recipe.ingredients),
         tags=overrides.get("tags", source_recipe.tags),
-        description=overrides.get("description", source_recipe.description),
+        steps=overrides.get("steps", source_recipe.steps),
         average_rating=None,
     )
 

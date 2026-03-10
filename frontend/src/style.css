@@ -533,6 +533,27 @@ pre {
   margin-bottom: 0.9rem;
 }
 
+.intro-box {
+  background: linear-gradient(180deg, #1b2849, #1a2440);
+  border: 1px solid #3a4b78;
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  margin: 0 0 0.9rem;
+}
+
+.intro-box h3 {
+  margin: 0 0 0.35rem;
+  font-size: 0.95rem;
+  color: #d9e6ff;
+}
+
+.intro-box p {
+  margin: 0;
+  color: #edf3ff;
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
 @media (max-width: 880px) {
   .topbar {
     grid-template-columns: 1fr;

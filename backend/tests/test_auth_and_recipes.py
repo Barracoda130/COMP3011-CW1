@@ -32,7 +32,7 @@ def test_register_login_create_recipe_and_rate() -> None:
                 "prep_minutes": 20,
                 "calories": 650,
                 "tags": ["high-protein", "quick"],
-                "description": "Simple high-protein meal.",
+                "steps": "Simple high-protein meal.",
             },
             headers=headers,
         )
@@ -138,7 +138,7 @@ def test_get_suggested_recipes_uses_user_rating_profile(monkeypatch) -> None:
                 "prep_minutes": 25,
                 "calories": 540,
                 "tags": ["pasta", "tomato", "quick"],
-                "description": "Simple tomato pasta",
+                "steps": "Simple tomato pasta",
             },
             headers=headers,
         )
@@ -153,7 +153,7 @@ def test_get_suggested_recipes_uses_user_rating_profile(monkeypatch) -> None:
                 "prep_minutes": 30,
                 "calories": 620,
                 "tags": ["pasta", "creamy"],
-                "description": "Creamy pasta",
+                "steps": "Creamy pasta",
             },
             headers=headers,
         )
@@ -167,7 +167,7 @@ def test_get_suggested_recipes_uses_user_rating_profile(monkeypatch) -> None:
                 "prep_minutes": 20,
                 "calories": 450,
                 "tags": ["tofu", "spicy"],
-                "description": "Spicy tofu",
+                "steps": "Spicy tofu",
             },
             headers=headers,
         )
@@ -210,7 +210,7 @@ def test_suggested_recipes_excludes_already_rated(monkeypatch) -> None:
         "image_url": None,
         "prep_minutes": None,
         "calories": None,
-        "description": "Already rated",
+        "steps": "Already rated",
         "tags": ["beef"],
         "category": "Beef",
         "key_ingredients": ["beef"],
@@ -231,7 +231,7 @@ def test_suggested_recipes_excludes_already_rated(monkeypatch) -> None:
             "source": "themealdb",
             "title": "Rated External Meal",
             "cuisine": "British",
-            "description": "Beef",
+            "steps": "Beef",
             "instructions": "Cook it",
             "image_url": None,
             "tags": ["beef"],
@@ -264,7 +264,7 @@ def test_suggested_recipes_excludes_already_rated(monkeypatch) -> None:
                 "prep_minutes": 35,
                 "calories": 700,
                 "tags": ["beef", "pie"],
-                "description": "Hearty",
+                "steps": "Hearty",
             },
             headers=headers,
         )
@@ -305,7 +305,7 @@ def test_get_rated_recipes_supports_search_and_score_filter(monkeypatch) -> None
             "source": "themealdb",
             "title": "Chicken Handi",
             "cuisine": "Indian",
-            "description": "Chicken",
+            "steps": "Chicken",
             "instructions": "Cook it",
             "image_url": None,
             "tags": ["chicken"],
@@ -338,7 +338,7 @@ def test_get_rated_recipes_supports_search_and_score_filter(monkeypatch) -> None
                 "prep_minutes": 20,
                 "calories": 550,
                 "tags": ["pasta", "lemon"],
-                "description": "Tangy",
+                "steps": "Tangy",
             },
             headers=headers,
         )
@@ -405,7 +405,7 @@ def test_suggested_recipes_uses_cache_until_new_rating(monkeypatch) -> None:
                 "prep_minutes": 20,
                 "calories": 550,
                 "tags": ["pasta", "herb"],
-                "description": "Good",
+                "steps": "Good",
             },
             headers=headers,
         )
@@ -427,7 +427,7 @@ def test_suggested_recipes_uses_cache_until_new_rating(monkeypatch) -> None:
                 "prep_minutes": 25,
                 "calories": 600,
                 "tags": ["pasta", "basil"],
-                "description": "Candidate",
+                "steps": "Candidate",
             },
             headers=headers,
         )
@@ -453,7 +453,7 @@ def test_suggested_recipes_uses_cache_until_new_rating(monkeypatch) -> None:
                 "prep_minutes": 18,
                 "calories": 430,
                 "tags": ["tofu", "spicy"],
-                "description": "Disliked pattern",
+                "steps": "Disliked pattern",
             },
             headers=headers,
         )
@@ -513,7 +513,7 @@ def test_my_recipes_list_and_copy_edit_flow() -> None:
                 "calories": 500,
                 "image_url": "data:image/png;base64,AAA",
                 "tags": ["pasta", "quick"],
-                "description": "Original description",
+                "steps": "Original description",
             },
             headers=owner_headers,
         )
@@ -534,7 +534,7 @@ def test_my_recipes_list_and_copy_edit_flow() -> None:
             f"/api/v1/recipes/{original_id}/copy",
             json={
                 "title": "Original Pasta - My Version",
-                "description": "Tweaked version",
+                "steps": "Tweaked version",
                 "tags": ["pasta", "custom"],
             },
             headers=editor_headers,
@@ -542,14 +542,14 @@ def test_my_recipes_list_and_copy_edit_flow() -> None:
         assert copy_response.status_code == 201
         copied_recipe = copy_response.json()
         assert copied_recipe["title"] == "Original Pasta - My Version"
-        assert copied_recipe["description"] == "Tweaked version"
+        assert copied_recipe["steps"] == "Tweaked version"
         assert copied_recipe["image_url"] == "data:image/png;base64,AAA"
         assert copied_recipe["owner_id"] != original_recipe["owner_id"]
 
         original_after_copy = client.get(f"/api/v1/recipes/{original_id}")
         assert original_after_copy.status_code == 200
         assert original_after_copy.json()["title"] == "Original Pasta"
-        assert original_after_copy.json()["description"] == "Original description"
+        assert original_after_copy.json()["steps"] == "Original description"
 
         my_recipes_editor_after = client.get("/api/v1/recipes/mine", headers=editor_headers)
         assert my_recipes_editor_after.status_code == 200
