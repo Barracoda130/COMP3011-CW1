@@ -1,3 +1,4 @@
+import math
 import re
 from collections import Counter, defaultdict
 from datetime import UTC, datetime, timedelta
@@ -64,6 +65,104 @@ def _ingredient_tokens(ingredients: list[str]) -> set[str]:
     for ingredient in ingredients:
         tokens.update(_tokenize_feature(ingredient))
     return tokens
+
+
+_INGREDIENT_STOPWORDS = {
+    "cup",
+    "cups",
+    "tbsp",
+    "tsp",
+    "teaspoon",
+    "teaspoons",
+    "tablespoon",
+    "tablespoons",
+    "gram",
+    "grams",
+    "kg",
+    "ml",
+    "l",
+    "oz",
+    "lb",
+    "small",
+    "medium",
+    "large",
+    "fresh",
+    "chopped",
+    "sliced",
+    "diced",
+    "of",
+}
+
+
+def _parse_quantity_prefix(raw_value: str) -> float:
+    value = raw_value.strip().lower()
+    if not value:
+        return 1.0
+
+    mixed_match = re.match(r"^(\d+)\s+(\d+)/(\d+)", value)
+    if mixed_match:
+        whole = float(mixed_match.group(1))
+        numerator = float(mixed_match.group(2))
+        denominator = float(mixed_match.group(3))
+        if denominator > 0:
+            return min(whole + (numerator / denominator), 8.0)
+
+    fraction_match = re.match(r"^(\d+)/(\d+)", value)
+    if fraction_match:
+        numerator = float(fraction_match.group(1))
+        denominator = float(fraction_match.group(2))
+        if denominator > 0:
+            return min(numerator / denominator, 8.0)
+
+    decimal_match = re.match(r"^(\d+(?:\.\d+)?)", value)
+    if decimal_match:
+        return min(float(decimal_match.group(1)), 8.0)
+
+    return 1.0
+
+
+def _ingredient_profile(ingredients: list[str]) -> dict[str, float]:
+    profile: dict[str, float] = defaultdict(float)
+    for raw in ingredients:
+        quantity = _parse_quantity_prefix(raw)
+        for token in _tokenize_feature(raw):
+            if token in _INGREDIENT_STOPWORDS:
+                continue
+            profile[token] += quantity
+    return dict(profile)
+
+
+def _build_ingredient_rarity_weights(all_profiles: list[dict[str, float]]) -> dict[str, float]:
+    document_frequency: Counter[str] = Counter()
+    for profile in all_profiles:
+        for token in profile:
+            document_frequency[token] += 1
+
+    if not document_frequency:
+        return {}
+
+    rarity_weights: dict[str, float] = {}
+    for token, count in document_frequency.items():
+        # Common tokens receive a lower score; rarer tokens have stronger influence.
+        rarity_weights[token] = 1.0 / (1.0 + math.log1p(float(count)))
+    return rarity_weights
+
+
+def _ingredient_weighted_overlap(
+    candidate_profile: dict[str, float],
+    preference_weights: dict[str, float],
+    rarity_weights: dict[str, float],
+) -> float:
+    if not candidate_profile:
+        return 0.0
+
+    score = 0.0
+    for token, quantity in candidate_profile.items():
+        if token not in preference_weights:
+            continue
+        rarity = rarity_weights.get(token, 1.0)
+        score += preference_weights[token] * quantity * rarity
+    return score
 
 
 def _prep_band(minutes: int | None) -> str | None:
@@ -373,7 +472,7 @@ def suggested_recipes_for_user(
             continue
 
         features = _local_recipe_feature_set(recipe)
-        ingredient_tokens = _ingredient_tokens(recipe.ingredients or [])
+        ingredient_profile = _ingredient_profile(recipe.ingredients or [])
         prep_band = _prep_band(recipe.prep_minutes)
         calorie_band = _calorie_band(recipe.calories)
         if not features:
@@ -384,8 +483,8 @@ def suggested_recipes_for_user(
             liked_features.update(features)
             for feature in features:
                 liked_feature_weights[feature] += weight
-            for token in ingredient_tokens:
-                liked_ingredient_weights[token] += weight
+            for token, quantity in ingredient_profile.items():
+                liked_ingredient_weights[token] += weight * quantity
             if prep_band:
                 liked_prep_bands[prep_band] += 1
             if calorie_band:
@@ -395,8 +494,8 @@ def suggested_recipes_for_user(
             disliked_features.update(features)
             for feature in features:
                 disliked_feature_weights[feature] += weight
-            for token in ingredient_tokens:
-                disliked_ingredient_weights[token] += weight
+            for token, quantity in ingredient_profile.items():
+                disliked_ingredient_weights[token] += weight * quantity
             if prep_band:
                 disliked_prep_bands[prep_band] += 1
             if calorie_band:
@@ -413,7 +512,7 @@ def suggested_recipes_for_user(
             continue
 
         ingredient_names = [item.get("name", "") for item in external_recipe.get("ingredients", [])]
-        ingredient_tokens = _ingredient_tokens([name for name in ingredient_names if name])
+        ingredient_profile = _ingredient_profile([name for name in ingredient_names if name])
         prep_band = _prep_band(external_recipe.get("prep_minutes"))
         calorie_band = _calorie_band(external_recipe.get("calories"))
         features: set[str] = set()
@@ -431,8 +530,8 @@ def suggested_recipes_for_user(
             liked_features.update(features)
             for feature in features:
                 liked_feature_weights[feature] += weight
-            for token in ingredient_tokens:
-                liked_ingredient_weights[token] += weight
+            for token, quantity in ingredient_profile.items():
+                liked_ingredient_weights[token] += weight * quantity
             if prep_band:
                 liked_prep_bands[prep_band] += 1
             if calorie_band:
@@ -442,8 +541,8 @@ def suggested_recipes_for_user(
             disliked_features.update(features)
             for feature in features:
                 disliked_feature_weights[feature] += weight
-            for token in ingredient_tokens:
-                disliked_ingredient_weights[token] += weight
+            for token, quantity in ingredient_profile.items():
+                disliked_ingredient_weights[token] += weight * quantity
             if prep_band:
                 disliked_prep_bands[prep_band] += 1
             if calorie_band:
@@ -457,14 +556,16 @@ def suggested_recipes_for_user(
 
     local_candidates = db.query(Recipe).limit(400).all()
     local_candidate_features: dict[int, set[str]] = {}
-    local_candidate_ingredients: dict[int, set[str]] = {}
+    local_candidate_ingredient_profiles: dict[int, dict[str, float]] = {}
     local_candidate_prep: dict[int, str | None] = {}
     local_candidate_calorie: dict[int, str | None] = {}
+    rarity_profiles: list[dict[str, float]] = []
     for recipe in local_candidates:
         if recipe.id in rated_local_ids:
             continue
         local_candidate_features[recipe.id] = _local_recipe_feature_set(recipe)
-        local_candidate_ingredients[recipe.id] = _ingredient_tokens(recipe.ingredients or [])
+        local_candidate_ingredient_profiles[recipe.id] = _ingredient_profile(recipe.ingredients or [])
+        rarity_profiles.append(local_candidate_ingredient_profiles[recipe.id])
         local_candidate_prep[recipe.id] = _prep_band(recipe.prep_minutes)
         local_candidate_calorie[recipe.id] = _calorie_band(recipe.calories)
         candidate_items.append(
@@ -511,16 +612,21 @@ def suggested_recipes_for_user(
 
     candidate_items.extend(external_candidates_by_id.values())
 
+    for item in external_candidates_by_id.values():
+        rarity_profiles.append(_ingredient_profile(item.key_ingredients))
+
+    ingredient_rarity_weights = _build_ingredient_rarity_weights(rarity_profiles)
+
     scored_items: list[RecipeDiscoverItem] = []
     for item in candidate_items:
         if item.source == "local":
             candidate_features = local_candidate_features.get(int(item.id), set())
-            candidate_ingredients = local_candidate_ingredients.get(int(item.id), set())
+            candidate_ingredient_profile = local_candidate_ingredient_profiles.get(int(item.id), {})
             prep_band = local_candidate_prep.get(int(item.id))
             calorie_band = local_candidate_calorie.get(int(item.id))
         else:
             candidate_features = _external_item_feature_set(item)
-            candidate_ingredients = _ingredient_tokens(item.key_ingredients)
+            candidate_ingredient_profile = _ingredient_profile(item.key_ingredients)
             prep_band = _prep_band(item.prep_minutes)
             calorie_band = _calorie_band(item.calories)
 
@@ -531,8 +637,16 @@ def suggested_recipes_for_user(
         disliked_jaccard = _jaccard(candidate_features, disliked_features)
         liked_overlap = _weighted_overlap(candidate_features, liked_feature_weights)
         disliked_overlap = _weighted_overlap(candidate_features, disliked_feature_weights)
-        liked_ingredient_overlap = _weighted_overlap(candidate_ingredients, liked_ingredient_weights)
-        disliked_ingredient_overlap = _weighted_overlap(candidate_ingredients, disliked_ingredient_weights)
+        liked_ingredient_overlap = _ingredient_weighted_overlap(
+            candidate_ingredient_profile,
+            liked_ingredient_weights,
+            ingredient_rarity_weights,
+        )
+        disliked_ingredient_overlap = _ingredient_weighted_overlap(
+            candidate_ingredient_profile,
+            disliked_ingredient_weights,
+            ingredient_rarity_weights,
+        )
 
         prep_affinity = 0.0
         if prep_band:
@@ -574,8 +688,10 @@ def suggested_recipes_for_user(
             reasons.append(f"Matches your liked flavors: {', '.join(top_liked_features[:3])}")
 
         top_ingredients = sorted(
-            (token for token in candidate_ingredients if token in liked_ingredient_weights),
-            key=lambda token: liked_ingredient_weights[token],
+            (token for token in candidate_ingredient_profile if token in liked_ingredient_weights),
+            key=lambda token: liked_ingredient_weights[token]
+            * candidate_ingredient_profile.get(token, 0.0)
+            * ingredient_rarity_weights.get(token, 1.0),
             reverse=True,
         )
         if top_ingredients:

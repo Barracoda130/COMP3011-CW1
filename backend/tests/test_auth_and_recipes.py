@@ -569,6 +569,105 @@ def test_suggested_recipes_include_prep_and_calorie_reasons(monkeypatch) -> None
         assert "calorie range matches" in reasons_text
 
 
+def test_suggested_recipes_weight_rare_and_high_quantity_liked_ingredients(monkeypatch) -> None:
+    email = f"test-{uuid4().hex[:8]}@example.com"
+    password = "StrongPass123"
+
+    monkeypatch.setattr(recipes_endpoints, "search_themealdb_recipes", lambda query, limit=20: [])
+
+    with TestClient(app) as client:
+        register_response = client.post(
+            "/api/v1/auth/register",
+            json={"email": email, "password": password, "full_name": "Rarity Quantity User"},
+        )
+        assert register_response.status_code == 201
+
+        login_response = client.post(
+            "/api/v1/auth/login",
+            data={"username": email, "password": password},
+        )
+        assert login_response.status_code == 200
+        token = login_response.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        liked = client.post(
+            "/api/v1/recipes",
+            json={
+                "title": "Loved Rare Stew",
+                "cuisine": "Fusion",
+                "prep_minutes": 30,
+                "calories": 600,
+                "ingredients": ["6 saffron threads", "1 pinch salt"],
+                "tags": ["stew"],
+                "steps": "Cook",
+            },
+            headers=headers,
+        )
+        assert liked.status_code == 201
+        liked_id = liked.json()["id"]
+
+        for idx in range(12):
+            filler = client.post(
+                "/api/v1/recipes",
+                json={
+                    "title": f"Salt Filler {idx}",
+                    "cuisine": "Generic",
+                    "prep_minutes": 20,
+                    "calories": 500,
+                    "ingredients": ["1 tsp salt", "1 cup water"],
+                    "tags": ["filler"],
+                    "steps": "Mix",
+                },
+                headers=headers,
+            )
+            assert filler.status_code == 201
+
+        strong_rare_candidate = client.post(
+            "/api/v1/recipes",
+            json={
+                "title": "Saffron Forward Rice",
+                "cuisine": "Fusion",
+                "prep_minutes": 28,
+                "calories": 610,
+                "ingredients": ["5 saffron threads", "1 cup rice"],
+                "tags": ["rice"],
+                "steps": "Simmer",
+            },
+            headers=headers,
+        )
+        assert strong_rare_candidate.status_code == 201
+
+        common_candidate = client.post(
+            "/api/v1/recipes",
+            json={
+                "title": "Extra Salty Soup",
+                "cuisine": "Generic",
+                "prep_minutes": 18,
+                "calories": 480,
+                "ingredients": ["7 tsp salt", "1 cup stock"],
+                "tags": ["soup"],
+                "steps": "Boil",
+            },
+            headers=headers,
+        )
+        assert common_candidate.status_code == 201
+
+        like_rating = client.post(
+            f"/api/v1/recipes/{liked_id}/ratings",
+            json={"score": 5, "comment": "Loved this"},
+            headers=headers,
+        )
+        assert like_rating.status_code == 200
+
+        suggested_response = client.get("/api/v1/recipes/suggested?local_limit=80&external_limit=1", headers=headers)
+        assert suggested_response.status_code == 200
+        payload = suggested_response.json()
+
+        rare_item = next(item for item in payload["items"] if item["title"] == "Saffron Forward Rice")
+        common_item = next(item for item in payload["items"] if item["title"] == "Extra Salty Soup")
+        assert rare_item["recommendation_score"] > common_item["recommendation_score"]
+
+
 def test_my_recipes_list_and_copy_edit_flow() -> None:
     owner_email = f"owner-{uuid4().hex[:8]}@example.com"
     editor_email = f"editor-{uuid4().hex[:8]}@example.com"
