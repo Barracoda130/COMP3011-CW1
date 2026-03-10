@@ -1,8 +1,13 @@
 <script setup>
-import { onMounted, ref, watch } from "vue";
+import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { onBeforeRouteLeave } from "vue-router";
 import { RouterLink } from "vue-router";
 import { useRoute } from "vue-router";
 import { api } from "../services/api";
+import { formatPrepTime } from "../utils/time";
+import { loadSessionPageCache, saveSessionPageCache } from "../utils/pageCache";
+
+const MY_RECIPES_STATE_KEY = "my-recipes-page-state";
 
 const route = useRoute();
 const items = ref([]);
@@ -10,6 +15,8 @@ const searchQuery = ref("");
 const isLoading = ref(false);
 const error = ref("");
 const updatedRecipeId = ref(null);
+const restoredScrollY = ref(0);
+const restoredFromCache = ref(false);
 
 function stepsPreview(text) {
   if (!text) return "";
@@ -30,11 +37,62 @@ async function loadMyRecipes() {
   error.value = "";
   try {
     items.value = await api.listMyRecipes({ query: searchQuery.value });
+    savePageState();
   } catch (err) {
     error.value = err.message;
   } finally {
     isLoading.value = false;
   }
+}
+
+function getCurrentScrollY() {
+  return window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0;
+}
+
+function savePageState() {
+  const payload = {
+    query: searchQuery.value,
+    scrollY: getCurrentScrollY(),
+    items: items.value,
+    updatedRecipeId: updatedRecipeId.value
+  };
+  saveSessionPageCache(MY_RECIPES_STATE_KEY, payload, { maxBytes: 1_200_000, ttlMs: 10 * 60 * 1000 });
+}
+
+function restorePageState() {
+  const parsed = loadSessionPageCache(MY_RECIPES_STATE_KEY, { ttlMs: 10 * 60 * 1000 });
+  if (!parsed) {
+    return;
+  }
+
+  if (typeof parsed.query === "string") {
+    searchQuery.value = parsed.query;
+  }
+  if (typeof parsed.scrollY === "number" && Number.isFinite(parsed.scrollY)) {
+    restoredScrollY.value = Math.max(0, parsed.scrollY);
+  }
+  if (Array.isArray(parsed.items)) {
+    items.value = parsed.items;
+    restoredFromCache.value = true;
+  }
+  if (typeof parsed.updatedRecipeId === "number") {
+    updatedRecipeId.value = parsed.updatedRecipeId;
+  }
+}
+
+function restoreScrollPosition() {
+  if (restoredScrollY.value <= 0) {
+    return;
+  }
+
+  const targetY = restoredScrollY.value;
+  const apply = () => {
+    window.scrollTo({ top: targetY, behavior: "auto" });
+  };
+
+  apply();
+  requestAnimationFrame(apply);
+  setTimeout(apply, 120);
 }
 
 async function deleteRecipe(recipeId) {
@@ -48,11 +106,30 @@ async function deleteRecipe(recipeId) {
 }
 
 onMounted(async () => {
+  restorePageState();
   syncUpdatedRecipeIdFromRoute();
-  await loadMyRecipes();
+  window.addEventListener("beforeunload", savePageState);
+
+  if (!restoredFromCache.value) {
+    await loadMyRecipes();
+    return;
+  }
+
+  await nextTick();
+  restoreScrollPosition();
 });
 
 watch(() => route.query.updated, syncUpdatedRecipeIdFromRoute);
+watch(searchQuery, savePageState);
+
+onUnmounted(() => {
+  savePageState();
+  window.removeEventListener("beforeunload", savePageState);
+});
+
+onBeforeRouteLeave(() => {
+  savePageState();
+});
 </script>
 
 <template>
@@ -105,7 +182,7 @@ watch(() => route.query.updated, syncUpdatedRecipeIdFromRoute);
                 <span v-if="updatedRecipeId === recipe.id" class="saved-indicator">Changes saved</span>
                 <div class="summary" style="margin-top: 0.35rem">
                   <span class="pill local">local</span>
-                  <span class="pill quick">Prep: {{ recipe.prep_minutes }} min</span>
+                  <span class="pill quick">Prep: {{ formatPrepTime(recipe.prep_minutes) }}</span>
                   <span v-if="recipe.calories !== null && recipe.calories !== undefined" class="pill quick">
                     Calories: {{ recipe.calories }}
                   </span>

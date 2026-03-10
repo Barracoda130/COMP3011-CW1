@@ -1,7 +1,12 @@
 <script setup>
-import { onMounted, ref } from "vue";
+import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { onBeforeRouteLeave } from "vue-router";
 import { RouterLink } from "vue-router";
 import { api } from "../services/api";
+import { formatPrepTime } from "../utils/time";
+import { loadSessionPageCache, saveSessionPageCache } from "../utils/pageCache";
+
+const RATED_STATE_KEY = "rated-page-state";
 
 const ratedItems = ref([]);
 const localCount = ref(0);
@@ -10,11 +15,13 @@ const searchQuery = ref("");
 const scoreFilter = ref("");
 const isLoading = ref(false);
 const error = ref("");
+const restoredScrollY = ref(0);
+const restoredFromCache = ref(false);
 
 function quickFacts(recipe) {
   const facts = [];
   if (recipe.prep_minutes) {
-    facts.push(`Cook time: ${recipe.prep_minutes} min`);
+    facts.push(`Cook time: ${formatPrepTime(recipe.prep_minutes)}`);
   }
   if (recipe.calories !== null && recipe.calories !== undefined) {
     facts.push(`Calories: ${recipe.calories}`);
@@ -36,6 +43,7 @@ async function loadRatedRecipes() {
     ratedItems.value = response.items;
     localCount.value = response.local_count;
     externalCount.value = response.external_count;
+    savePageState();
   } catch (err) {
     error.value = err.message;
   } finally {
@@ -43,7 +51,85 @@ async function loadRatedRecipes() {
   }
 }
 
-onMounted(loadRatedRecipes);
+function getCurrentScrollY() {
+  return window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0;
+}
+
+function savePageState() {
+  const payload = {
+    query: searchQuery.value,
+    scoreFilter: scoreFilter.value,
+    scrollY: getCurrentScrollY(),
+    cachedItems: ratedItems.value,
+    localCount: localCount.value,
+    externalCount: externalCount.value
+  };
+  saveSessionPageCache(RATED_STATE_KEY, payload, { maxBytes: 1_200_000, ttlMs: 10 * 60 * 1000 });
+}
+
+function restoreScrollPosition() {
+  if (restoredScrollY.value <= 0) {
+    return;
+  }
+
+  const targetY = restoredScrollY.value;
+  const apply = () => {
+    window.scrollTo({ top: targetY, behavior: "auto" });
+  };
+
+  apply();
+  requestAnimationFrame(apply);
+  setTimeout(apply, 120);
+  setTimeout(apply, 320);
+}
+
+function restorePageState() {
+  const parsed = loadSessionPageCache(RATED_STATE_KEY, { ttlMs: 10 * 60 * 1000 });
+  if (!parsed) {
+    return;
+  }
+
+  if (typeof parsed.query === "string") {
+    searchQuery.value = parsed.query;
+  }
+  if (typeof parsed.scoreFilter === "string") {
+    scoreFilter.value = parsed.scoreFilter;
+  }
+  if (typeof parsed.scrollY === "number" && Number.isFinite(parsed.scrollY)) {
+    restoredScrollY.value = Math.max(0, parsed.scrollY);
+  }
+
+  if (Array.isArray(parsed.cachedItems)) {
+    ratedItems.value = parsed.cachedItems;
+    localCount.value = typeof parsed.localCount === "number" ? parsed.localCount : 0;
+    externalCount.value = typeof parsed.externalCount === "number" ? parsed.externalCount : 0;
+    restoredFromCache.value = true;
+  }
+}
+
+onMounted(async () => {
+  restorePageState();
+  window.addEventListener("beforeunload", savePageState);
+  if (!restoredFromCache.value) {
+    await loadRatedRecipes();
+    return;
+  }
+
+  await nextTick();
+  restoreScrollPosition();
+});
+
+watch([searchQuery, scoreFilter], () => {
+  savePageState();
+});
+onUnmounted(() => {
+  savePageState();
+  window.removeEventListener("beforeunload", savePageState);
+});
+
+onBeforeRouteLeave(() => {
+  savePageState();
+});
 </script>
 
 <template>

@@ -4,6 +4,7 @@ import { RouterLink } from "vue-router";
 import { useRoute } from "vue-router";
 import { api } from "../services/api";
 import { isAuthenticated } from "../stores/auth";
+import { formatPrepTime } from "../utils/time";
 
 const props = defineProps({
   source: { type: String, required: true },
@@ -263,7 +264,7 @@ watch(() => `${props.source}:${props.id}`, loadCookRecipe);
           <article class="card">
             <h3>Recipe info</h3>
             <p class="small"><strong>Tags:</strong> {{ recipe.tags?.length ? recipe.tags.join(", ") : "No tags" }}</p>
-            <p class="small">Prep: {{ recipe.prep_minutes ?? "N/A" }} mins</p>
+            <p class="small">Prep: {{ formatPrepTime(recipe.prep_minutes) }}</p>
             <p class="small">Calories: {{ recipe.calories ?? "N/A" }}</p>
             <details v-if="recipe.estimated_cost_debug" class="stack" style="margin-top: 0.4rem">
               <summary class="small">Cost Debug</summary>

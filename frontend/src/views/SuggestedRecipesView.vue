@@ -1,18 +1,25 @@
 <script setup>
-import { onMounted, ref } from "vue";
+import { nextTick, onMounted, onUnmounted, ref } from "vue";
+import { onBeforeRouteLeave } from "vue-router";
 import { RouterLink } from "vue-router";
 import { api } from "../services/api";
+import { formatPrepTime } from "../utils/time";
+import { loadSessionPageCache, saveSessionPageCache } from "../utils/pageCache";
+
+const SUGGESTED_STATE_KEY = "suggested-page-state";
 
 const items = ref([]);
 const localCount = ref(0);
 const externalCount = ref(0);
 const error = ref("");
 const isLoading = ref(false);
+const restoredScrollY = ref(0);
+const restoredFromCache = ref(false);
 
 function quickFacts(recipe) {
   const facts = [];
   if (recipe.prep_minutes) {
-    facts.push(`Cook time: ${recipe.prep_minutes} min`);
+    facts.push(`Cook time: ${formatPrepTime(recipe.prep_minutes)}`);
   }
   if (recipe.calories !== null && recipe.calories !== undefined) {
     facts.push(`Calories: ${recipe.calories}`);
@@ -44,6 +51,7 @@ async function loadSuggestions() {
     items.value = response.items;
     localCount.value = response.local_count;
     externalCount.value = response.external_count;
+    savePageState();
   } catch (err) {
     error.value = err.message;
   } finally {
@@ -51,7 +59,69 @@ async function loadSuggestions() {
   }
 }
 
-onMounted(loadSuggestions);
+function getCurrentScrollY() {
+  return window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0;
+}
+
+function savePageState() {
+  const payload = {
+    scrollY: getCurrentScrollY(),
+    items: items.value,
+    localCount: localCount.value,
+    externalCount: externalCount.value
+  };
+  saveSessionPageCache(SUGGESTED_STATE_KEY, payload, { maxBytes: 1_200_000, ttlMs: 10 * 60 * 1000 });
+}
+
+function restorePageState() {
+  const parsed = loadSessionPageCache(SUGGESTED_STATE_KEY, { ttlMs: 10 * 60 * 1000 });
+  if (!parsed) {
+    return;
+  }
+
+  if (typeof parsed.scrollY === "number" && Number.isFinite(parsed.scrollY)) {
+    restoredScrollY.value = Math.max(0, parsed.scrollY);
+  }
+  if (Array.isArray(parsed.items)) {
+    items.value = parsed.items;
+    localCount.value = typeof parsed.localCount === "number" ? parsed.localCount : 0;
+    externalCount.value = typeof parsed.externalCount === "number" ? parsed.externalCount : 0;
+    restoredFromCache.value = true;
+  }
+}
+
+function restoreScrollPosition() {
+  if (restoredScrollY.value <= 0) {
+    return;
+  }
+  const targetY = restoredScrollY.value;
+  const apply = () => window.scrollTo({ top: targetY, behavior: "auto" });
+  apply();
+  requestAnimationFrame(apply);
+  setTimeout(apply, 120);
+}
+
+onMounted(async () => {
+  restorePageState();
+  window.addEventListener("beforeunload", savePageState);
+
+  if (!restoredFromCache.value) {
+    await loadSuggestions();
+    return;
+  }
+
+  await nextTick();
+  restoreScrollPosition();
+});
+
+onUnmounted(() => {
+  savePageState();
+  window.removeEventListener("beforeunload", savePageState);
+});
+
+onBeforeRouteLeave(() => {
+  savePageState();
+});
 </script>
 
 <template>

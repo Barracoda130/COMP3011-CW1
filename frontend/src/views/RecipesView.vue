@@ -5,6 +5,8 @@ import { onBeforeRouteLeave } from "vue-router";
 import { RouterLink } from "vue-router";
 import { api } from "../services/api";
 import { isAuthenticated } from "../stores/auth";
+import { formatPrepTime } from "../utils/time";
+import { loadSessionPageCache, saveSessionPageCache } from "../utils/pageCache";
 
 const RECIPES_STATE_KEY = "recipes-page-state";
 
@@ -22,7 +24,7 @@ function buildQuickFacts(recipe) {
   const facts = [];
 
   if (recipe.prep_minutes) {
-    facts.push(`Cook time: ${recipe.prep_minutes} min`);
+    facts.push(`Cook time: ${formatPrepTime(recipe.prep_minutes)}`);
   }
   if (recipe.calories !== null && recipe.calories !== undefined) {
     facts.push(`Calories: ${recipe.calories}`);
@@ -73,7 +75,7 @@ function savePageState() {
     externalCount: externalCount.value,
     resultsQuery: searchQuery.value
   };
-  sessionStorage.setItem(RECIPES_STATE_KEY, JSON.stringify(payload));
+  saveSessionPageCache(RECIPES_STATE_KEY, payload, { maxBytes: 1_200_000, ttlMs: 10 * 60 * 1000 });
 }
 
 function restoreScrollPosition() {
@@ -93,32 +95,27 @@ function restoreScrollPosition() {
 }
 
 function restorePageState() {
-  const raw = sessionStorage.getItem(RECIPES_STATE_KEY);
-  if (!raw) {
+  const parsed = loadSessionPageCache(RECIPES_STATE_KEY, { ttlMs: 10 * 60 * 1000 });
+  if (!parsed) {
     return;
   }
 
-  try {
-    const parsed = JSON.parse(raw);
-    if (typeof parsed.searchQuery === "string") {
-      searchQuery.value = parsed.searchQuery;
-    }
-    if (typeof parsed.scrollY === "number" && Number.isFinite(parsed.scrollY)) {
-      restoredScrollY.value = Math.max(0, parsed.scrollY);
-    }
+  if (typeof parsed.searchQuery === "string") {
+    searchQuery.value = parsed.searchQuery;
+  }
+  if (typeof parsed.scrollY === "number" && Number.isFinite(parsed.scrollY)) {
+    restoredScrollY.value = Math.max(0, parsed.scrollY);
+  }
 
-    if (
-      Array.isArray(parsed.cachedResults) &&
-      typeof parsed.resultsQuery === "string" &&
-      parsed.resultsQuery === searchQuery.value
-    ) {
-      recipes.value = parsed.cachedResults;
-      localCount.value = typeof parsed.localCount === "number" ? parsed.localCount : 0;
-      externalCount.value = typeof parsed.externalCount === "number" ? parsed.externalCount : 0;
-      restoredFromCache.value = true;
-    }
-  } catch {
-    sessionStorage.removeItem(RECIPES_STATE_KEY);
+  if (
+    Array.isArray(parsed.cachedResults) &&
+    typeof parsed.resultsQuery === "string" &&
+    parsed.resultsQuery === searchQuery.value
+  ) {
+    recipes.value = parsed.cachedResults;
+    localCount.value = typeof parsed.localCount === "number" ? parsed.localCount : 0;
+    externalCount.value = typeof parsed.externalCount === "number" ? parsed.externalCount : 0;
+    restoredFromCache.value = true;
   }
 }
 

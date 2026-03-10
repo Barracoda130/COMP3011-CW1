@@ -1,7 +1,12 @@
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
+import { onBeforeRouteLeave } from "vue-router";
 import { RouterLink } from "vue-router";
 import { api } from "../services/api";
+import { formatPrepTime } from "../utils/time";
+import { loadSessionPageCache, saveSessionPageCache } from "../utils/pageCache";
+
+const WEEKLY_PLAN_STATE_KEY = "weekly-plan-page-state";
 
 const isLoading = ref(false);
 const isGenerating = ref(false);
@@ -9,6 +14,8 @@ const selectingDayIndex = ref(null);
 const error = ref("");
 const plan = ref(null);
 const optionDetails = ref({});
+const restoredScrollY = ref(0);
+const restoredFromCache = ref(false);
 
 const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -104,7 +111,7 @@ function optionQuickFacts(item) {
     facts.push(`Cuisine: ${details.cuisine}`);
   }
   if (details.prep_minutes !== null && details.prep_minutes !== undefined) {
-    facts.push(`Cook time: ${details.prep_minutes} min`);
+    facts.push(`Cook time: ${formatPrepTime(details.prep_minutes)}`);
   }
   if (details.calories !== null && details.calories !== undefined) {
     facts.push(`Calories: ${details.calories}`);
@@ -137,6 +144,7 @@ async function loadCurrentPlan() {
     const response = await api.getCurrentWeeklyPlan();
     plan.value = response;
     await hydrateOptionDetails(response.items || []);
+    savePageState();
   } catch (err) {
     if (err?.status === 404) {
       plan.value = null;
@@ -155,6 +163,7 @@ async function generatePlan() {
     const response = await api.generateWeeklyPlan();
     plan.value = response;
     await hydrateOptionDetails(response.items || []);
+    savePageState();
   } catch (err) {
     error.value = err.message || "Failed to generate weekly plan.";
   } finally {
@@ -169,11 +178,58 @@ async function selectOption(dayIndex, recipeSource) {
     const response = await api.selectWeeklyPlanOption({ dayIndex, recipeSource });
     plan.value = response;
     await hydrateOptionDetails(response.items || []);
+    savePageState();
   } catch (err) {
     error.value = err.message || "Failed to save selection.";
   } finally {
     selectingDayIndex.value = null;
   }
+}
+
+function getCurrentScrollY() {
+  return window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0;
+}
+
+function savePageState() {
+  const payload = {
+    scrollY: getCurrentScrollY(),
+    plan: plan.value,
+    optionDetails: optionDetails.value
+  };
+  saveSessionPageCache(WEEKLY_PLAN_STATE_KEY, payload, { maxBytes: 1_200_000, ttlMs: 10 * 60 * 1000 });
+}
+
+function restorePageState() {
+  const parsed = loadSessionPageCache(WEEKLY_PLAN_STATE_KEY, { ttlMs: 10 * 60 * 1000 });
+  if (!parsed) {
+    return;
+  }
+
+  if (typeof parsed.scrollY === "number" && Number.isFinite(parsed.scrollY)) {
+    restoredScrollY.value = Math.max(0, parsed.scrollY);
+  }
+  if (parsed.plan && typeof parsed.plan === "object") {
+    plan.value = parsed.plan;
+    restoredFromCache.value = true;
+  }
+  if (parsed.optionDetails && typeof parsed.optionDetails === "object") {
+    optionDetails.value = parsed.optionDetails;
+  }
+}
+
+function restoreScrollPosition() {
+  if (restoredScrollY.value <= 0) {
+    return;
+  }
+
+  const targetY = restoredScrollY.value;
+  const apply = () => {
+    window.scrollTo({ top: targetY, behavior: "auto" });
+  };
+
+  apply();
+  requestAnimationFrame(apply);
+  setTimeout(apply, 120);
 }
 
 async function hydrateOptionDetails(items) {
@@ -207,7 +263,28 @@ async function hydrateOptionDetails(items) {
   optionDetails.value = merged;
 }
 
-onMounted(loadCurrentPlan);
+onMounted(async () => {
+  restorePageState();
+  window.addEventListener("beforeunload", savePageState);
+
+  if (!restoredFromCache.value) {
+    await loadCurrentPlan();
+    return;
+  }
+
+  await hydrateOptionDetails(plan.value?.items || []);
+  await nextTick();
+  restoreScrollPosition();
+});
+
+onUnmounted(() => {
+  savePageState();
+  window.removeEventListener("beforeunload", savePageState);
+});
+
+onBeforeRouteLeave(() => {
+  savePageState();
+});
 </script>
 
 <template>
