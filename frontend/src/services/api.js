@@ -134,6 +134,13 @@ export const api = {
   getCookRecipe: (source, id) => request(`/recipes/cook/${source}/${id}`),
   getMyRecipeRating: (id) => request(`/recipes/${id}/ratings/me`),
   getMyThemealdbRating: (externalId) => request(`/recipes/themealdb/${externalId}/ratings/me`),
+  generateWeeklyPlan: () => request("/users/me/weekly-plan/generate", { method: "POST" }),
+  getCurrentWeeklyPlan: () => request("/users/me/weekly-plan/current"),
+  selectWeeklyPlanOption: ({ dayIndex, recipeSource }) =>
+    request("/users/me/weekly-plan/current/select", {
+      method: "POST",
+      body: JSON.stringify({ day_index: dayIndex, recipe_source: recipeSource })
+    }),
   updateRecipe: (id, payload) => request(`/recipes/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   copyRecipe: (id, payload) => request(`/recipes/${id}/copy`, { method: "POST", body: JSON.stringify(payload) }),
   deleteRecipe: (id) => request(`/recipes/${id}`, { method: "DELETE" }),

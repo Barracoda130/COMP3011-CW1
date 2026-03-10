@@ -1,6 +1,6 @@
 from datetime import UTC, date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -22,7 +22,9 @@ class WeeklyPlan(Base):
 
 class WeeklyPlanItem(Base):
     __tablename__ = "weekly_plan_items"
-    __table_args__ = (UniqueConstraint("weekly_plan_id", "day_index", name="uq_weekly_plan_day_index"),)
+    __table_args__ = (
+        UniqueConstraint("weekly_plan_id", "day_index", "recipe_source", name="uq_weekly_plan_day_source"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     weekly_plan_id: Mapped[int] = mapped_column(ForeignKey("weekly_plans.id", ondelete="CASCADE"), index=True)
@@ -32,6 +34,7 @@ class WeeklyPlanItem(Base):
     recipe_id: Mapped[int | None] = mapped_column(ForeignKey("recipes.id", ondelete="SET NULL"), nullable=True)
     external_recipe_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     title_snapshot: Mapped[str] = mapped_column(String(150))
+    is_selected: Mapped[bool] = mapped_column(Boolean, default=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 

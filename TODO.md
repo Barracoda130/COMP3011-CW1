@@ -16,16 +16,16 @@
 ## Phase 3: Core Feature Gap (Highest Mark Impact)
 
 - [ ] Implement weekly plan models:
-  - [ ] `weekly_plans`
-  - [ ] `weekly_plan_items`
+  - [x] `weekly_plans`
+  - [x] `weekly_plan_items`
 - [ ] Implement endpoints:
-  - [ ] `POST /users/me/weekly-plan/generate`
-  - [ ] `GET /users/me/weekly-plan/current`
+  - [x] `POST /users/me/weekly-plan/generate`
+  - [x] `GET /users/me/weekly-plan/current`
 - [ ] Apply planning constraints:
-  - [ ] avoid consecutive same main ingredient
-  - [ ] cap repeated cuisines
-  - [ ] weekday quick-meal bias
-  - [ ] weekend flexible/treat meal behavior
+  - [x] avoid consecutive same main ingredient
+  - [x] cap repeated cuisines
+  - [x] weekday quick-meal bias
+  - [x] weekend flexible/treat meal behavior
 
 ## Phase 4: Recommendation Quality Upgrade
 

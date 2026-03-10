@@ -1,8 +1,10 @@
+from collections import Counter
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
 from app.api.v1.endpoints import recipes as recipes_endpoints
+from app.api.v1.endpoints import users as users_endpoints
 from app.main import app
 
 
@@ -65,6 +67,13 @@ def test_unauthorized_access_to_protected_endpoints() -> None:
         ("get", "/api/v1/recipes/1/ratings/me", None),
         ("post", "/api/v1/recipes/themealdb/52772/ratings", {"score": 4, "comment": "Good"}),
         ("get", "/api/v1/recipes/themealdb/52772/ratings/me", None),
+        ("post", "/api/v1/users/me/weekly-plan/generate", None),
+        ("get", "/api/v1/users/me/weekly-plan/current", None),
+        (
+            "post",
+            "/api/v1/users/me/weekly-plan/current/select",
+            {"day_index": 0, "recipe_source": "local"},
+        ),
     ]
 
     with TestClient(app) as client:
@@ -416,3 +425,319 @@ def test_discover_suggested_and_rated_query_validation(monkeypatch) -> None:
         mine_ok = client.get("/api/v1/recipes/mine?query=query", headers=headers)
         assert mine_ok.status_code == 200
         assert isinstance(mine_ok.json(), list)
+
+
+def test_weekly_plan_generate_and_get_current_with_constraints(monkeypatch) -> None:
+    email = f"planner-{uuid4().hex[:8]}@example.com"
+
+    # Keep weekly plan generation deterministic and offline for this constraints test.
+    external_catalog = [
+        {
+            "id": "themealdb-8001",
+            "external_id": "8001",
+            "source": "themealdb",
+            "title": "External Chicken Plate",
+            "cuisine": "French",
+            "image_url": None,
+            "prep_minutes": None,
+            "calories": None,
+            "description": "zesty",
+            "tags": ["chicken"],
+            "category": "Chicken",
+            "key_ingredients": ["chicken", "lemon"],
+            "average_rating": None,
+            "owner_id": None,
+        },
+        {
+            "id": "themealdb-8002",
+            "external_id": "8002",
+            "source": "themealdb",
+            "title": "External Tofu Plate",
+            "cuisine": "Japanese",
+            "image_url": None,
+            "prep_minutes": None,
+            "calories": None,
+            "description": "light",
+            "tags": ["tofu"],
+            "category": "Vegetarian",
+            "key_ingredients": ["tofu", "rice"],
+            "average_rating": None,
+            "owner_id": None,
+        },
+        {
+            "id": "themealdb-8003",
+            "external_id": "8003",
+            "source": "themealdb",
+            "title": "External Beef Plate",
+            "cuisine": "Mexican",
+            "image_url": None,
+            "prep_minutes": None,
+            "calories": None,
+            "description": "hearty",
+            "tags": ["beef"],
+            "category": "Beef",
+            "key_ingredients": ["beef", "pepper"],
+            "average_rating": None,
+            "owner_id": None,
+        },
+    ]
+    monkeypatch.setattr(users_endpoints, "search_themealdb_recipes", lambda query, limit=20: external_catalog)
+    monkeypatch.setattr(users_endpoints, "get_themealdb_recipe_by_id", lambda external_id: None)
+
+    with TestClient(app) as client:
+        headers = _register_and_login(client, email)
+
+        recipe_payloads = [
+            {
+                "title": "Quick Chicken Pasta",
+                "cuisine": "Italian",
+                "prep_minutes": 20,
+                "calories": 550,
+                "ingredients": ["chicken breast", "pasta"],
+                "tags": ["quick"],
+                "steps": "Cook quickly",
+            },
+            {
+                "title": "Quick Tofu Bowl",
+                "cuisine": "Asian",
+                "prep_minutes": 18,
+                "calories": 500,
+                "ingredients": ["tofu", "rice"],
+                "tags": ["quick"],
+                "steps": "Stir fry",
+            },
+            {
+                "title": "Quick Beef Wrap",
+                "cuisine": "Mexican",
+                "prep_minutes": 22,
+                "calories": 620,
+                "ingredients": ["beef", "tortilla"],
+                "tags": ["quick"],
+                "steps": "Assemble",
+            },
+            {
+                "title": "Quick Salmon Rice",
+                "cuisine": "Japanese",
+                "prep_minutes": 25,
+                "calories": 580,
+                "ingredients": ["salmon", "rice"],
+                "tags": ["quick"],
+                "steps": "Steam and serve",
+            },
+            {
+                "title": "Quick Veg Curry",
+                "cuisine": "Indian",
+                "prep_minutes": 30,
+                "calories": 540,
+                "ingredients": ["cauliflower", "peas"],
+                "tags": ["quick"],
+                "steps": "Simmer",
+            },
+            {
+                "title": "Slow Lamb Roast",
+                "cuisine": "British",
+                "prep_minutes": 75,
+                "calories": 760,
+                "ingredients": ["lamb", "potato"],
+                "tags": ["hearty"],
+                "steps": "Roast slowly",
+            },
+            {
+                "title": "Weekend Lasagna",
+                "cuisine": "Italian",
+                "prep_minutes": 65,
+                "calories": 820,
+                "ingredients": ["beef mince", "pasta sheets"],
+                "tags": ["comfort"],
+                "steps": "Bake",
+            },
+            {
+                "title": "Quick Chickpea Salad",
+                "cuisine": "Mediterranean",
+                "prep_minutes": 15,
+                "calories": 430,
+                "ingredients": ["chickpea", "tomato"],
+                "tags": ["quick"],
+                "steps": "Mix",
+            },
+        ]
+
+        for payload in recipe_payloads:
+            created = client.post("/api/v1/recipes", json=payload, headers=headers)
+            assert created.status_code == 201
+
+        generated = client.post("/api/v1/users/me/weekly-plan/generate", headers=headers)
+        assert generated.status_code == 200
+        generated_body = generated.json()
+        assert generated_body["status"] == "active"
+        assert len(generated_body["items"]) == 14
+
+        current = client.get("/api/v1/users/me/weekly-plan/current", headers=headers)
+        assert current.status_code == 200
+        current_items = sorted(current.json()["items"], key=lambda item: item["day_index"])
+        assert current_items == sorted(generated_body["items"], key=lambda item: item["day_index"])
+
+        # Constraint checks on local option track only.
+        local_items = [item for item in current_items if item["recipe_source"] == "local"]
+        external_items = [item for item in current_items if item["recipe_source"] == "themealdb"]
+        assert len(local_items) == 7
+        assert len(external_items) == 7
+
+        # Constraint: avoid consecutive same main ingredient inferred from local selected recipes.
+        recipe_lookup = {}
+        for recipe in client.get("/api/v1/recipes").json():
+            recipe_lookup[recipe["id"]] = recipe
+
+        local_items_sorted = sorted(local_items, key=lambda item: item["day_index"])
+        for idx in range(1, len(local_items_sorted)):
+            prev_recipe = recipe_lookup.get(local_items_sorted[idx - 1]["recipe_id"])
+            current_recipe = recipe_lookup.get(local_items_sorted[idx]["recipe_id"])
+            if not prev_recipe or not current_recipe:
+                continue
+            prev_first = (prev_recipe.get("ingredients") or ["unknown"])[0].split()[0].lower()
+            current_first = (current_recipe.get("ingredients") or ["unknown"])[0].split()[0].lower()
+            if prev_first != "unknown" and current_first != "unknown":
+                assert prev_first != current_first
+
+        # Constraint: cap repeated cuisine to max 2 in generated local options.
+        cuisines = [
+            recipe_lookup[item["recipe_id"]]["cuisine"]
+            for item in local_items
+            if item.get("recipe_id") in recipe_lookup
+        ]
+        for _cuisine, count in Counter(cuisines).items():
+            assert count <= 2
+
+        # User selection should persist one chosen option per day.
+        select_response = client.post(
+            "/api/v1/users/me/weekly-plan/current/select",
+            json={"day_index": 0, "recipe_source": "themealdb"},
+            headers=headers,
+        )
+        assert select_response.status_code == 200
+        day0_items = [item for item in select_response.json()["items"] if item["day_index"] == 0]
+        selected_sources = [item["recipe_source"] for item in day0_items if item["is_selected"]]
+        assert selected_sources == ["themealdb"]
+
+
+def test_weekly_plan_can_include_themealdb_and_local(monkeypatch) -> None:
+    email = f"planner-mixed-{uuid4().hex[:8]}@example.com"
+
+    external_catalog = [
+        {
+            "id": "themealdb-9001",
+            "external_id": "9001",
+            "source": "themealdb",
+            "title": "External Lemon Chicken",
+            "cuisine": "French",
+            "image_url": None,
+            "prep_minutes": None,
+            "calories": None,
+            "description": "zesty",
+            "tags": ["chicken", "quick"],
+            "category": "Chicken",
+            "key_ingredients": ["chicken", "lemon"],
+            "average_rating": None,
+            "owner_id": None,
+        },
+        {
+            "id": "themealdb-9002",
+            "external_id": "9002",
+            "source": "themealdb",
+            "title": "External Veg Pasta",
+            "cuisine": "Italian",
+            "image_url": None,
+            "prep_minutes": None,
+            "calories": None,
+            "description": "comfort",
+            "tags": ["vegetarian"],
+            "category": "Pasta",
+            "key_ingredients": ["pasta", "tomato"],
+            "average_rating": None,
+            "owner_id": None,
+        },
+        {
+            "id": "themealdb-9003",
+            "external_id": "9003",
+            "source": "themealdb",
+            "title": "External Beef Rice",
+            "cuisine": "Thai",
+            "image_url": None,
+            "prep_minutes": None,
+            "calories": None,
+            "description": "hearty",
+            "tags": ["beef"],
+            "category": "Beef",
+            "key_ingredients": ["beef", "rice"],
+            "average_rating": None,
+            "owner_id": None,
+        },
+        {
+            "id": "themealdb-9004",
+            "external_id": "9004",
+            "source": "themealdb",
+            "title": "External Fish Stew",
+            "cuisine": "Spanish",
+            "image_url": None,
+            "prep_minutes": None,
+            "calories": None,
+            "description": "rich",
+            "tags": ["fish"],
+            "category": "Seafood",
+            "key_ingredients": ["cod", "pepper"],
+            "average_rating": None,
+            "owner_id": None,
+        },
+    ]
+
+    monkeypatch.setattr(users_endpoints, "search_themealdb_recipes", lambda query, limit=20: external_catalog)
+    monkeypatch.setattr(users_endpoints, "get_themealdb_recipe_by_id", lambda external_id: None)
+
+    with TestClient(app) as client:
+        headers = _register_and_login(client, email)
+
+        local_payloads = [
+            {
+                "title": "Local Chicken Bowl",
+                "cuisine": "Asian",
+                "prep_minutes": 20,
+                "calories": 500,
+                "ingredients": ["chicken", "rice"],
+                "tags": ["quick"],
+                "steps": "Cook",
+            },
+            {
+                "title": "Local Bean Chili",
+                "cuisine": "Mexican",
+                "prep_minutes": 35,
+                "calories": 620,
+                "ingredients": ["beans", "tomato"],
+                "tags": ["hearty"],
+                "steps": "Simmer",
+            },
+            {
+                "title": "Local Herb Salmon",
+                "cuisine": "Nordic",
+                "prep_minutes": 28,
+                "calories": 580,
+                "ingredients": ["salmon", "potato"],
+                "tags": ["fresh"],
+                "steps": "Bake",
+            },
+        ]
+
+        for payload in local_payloads:
+            created = client.post("/api/v1/recipes", json=payload, headers=headers)
+            assert created.status_code == 201
+
+        generated = client.post("/api/v1/users/me/weekly-plan/generate", headers=headers)
+        assert generated.status_code == 200
+        items = generated.json()["items"]
+        assert len(items) == 14
+
+        sources = {item["recipe_source"] for item in items}
+        assert "local" in sources
+        assert "themealdb" in sources
+
+        external_ids = [item["external_recipe_id"] for item in items if item["recipe_source"] == "themealdb"]
+        assert all(external_id for external_id in external_ids)

@@ -12,6 +12,7 @@ import RecipeDetailView from "../views/RecipeDetailView.vue";
 import RatedRecipesView from "../views/RatedRecipesView.vue";
 import RecipesView from "../views/RecipesView.vue";
 import SuggestedRecipesView from "../views/SuggestedRecipesView.vue";
+import WeeklyPlanView from "../views/WeeklyPlanView.vue";
 
 const routes = [
   { path: "/", redirect: "/health" },
@@ -24,6 +25,7 @@ const routes = [
   { path: "/recipes/mine", name: "recipes-mine", component: MyRecipesView, meta: { requiresAuth: true } },
   { path: "/recipes/suggested", name: "recipes-suggested", component: SuggestedRecipesView, meta: { requiresAuth: true } },
   { path: "/recipes/rated", name: "recipes-rated", component: RatedRecipesView, meta: { requiresAuth: true } },
+  { path: "/recipes/weekly-plan", name: "recipes-weekly-plan", component: WeeklyPlanView, meta: { requiresAuth: true } },
   { path: "/recipes/create", name: "recipe-create", component: CreateRecipeView, meta: { requiresAuth: true } },
   { path: "/recipes/cook/:source/:id", name: "recipe-cook", component: RecipeCookView, props: true },
   { path: "/recipes/:id", name: "recipe-detail", component: RecipeDetailView, props: true },

@@ -133,4 +133,62 @@ describe("services/api", () => {
     expect(options.method).toBe("POST");
     expect(options.body).toBe(JSON.stringify({ url: "https://example.com/recipe" }));
   });
+
+  it("calls generate weekly plan endpoint with POST", async () => {
+    const { getToken } = await import("../stores/auth");
+    getToken.mockReturnValue("abc-token");
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: 1, status: "active", items: [] })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { api } = await import("./api");
+    await api.generateWeeklyPlan();
+
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(url).toBe("http://127.0.0.1:8000/api/v1/users/me/weekly-plan/generate");
+    expect(options.method).toBe("POST");
+  });
+
+  it("calls current weekly plan endpoint with GET", async () => {
+    const { getToken } = await import("../stores/auth");
+    getToken.mockReturnValue("abc-token");
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: 1, status: "active", items: [] })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { api } = await import("./api");
+    await api.getCurrentWeeklyPlan();
+
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(url).toBe("http://127.0.0.1:8000/api/v1/users/me/weekly-plan/current");
+    expect(options.method).toBeUndefined();
+  });
+
+  it("calls select weekly plan option endpoint with payload", async () => {
+    const { getToken } = await import("../stores/auth");
+    getToken.mockReturnValue("abc-token");
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: 1, status: "active", items: [] })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { api } = await import("./api");
+    await api.selectWeeklyPlanOption({ dayIndex: 3, recipeSource: "themealdb" });
+
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(url).toBe("http://127.0.0.1:8000/api/v1/users/me/weekly-plan/current/select");
+    expect(options.method).toBe("POST");
+    expect(options.body).toBe(JSON.stringify({ day_index: 3, recipe_source: "themealdb" }));
+  });
 });

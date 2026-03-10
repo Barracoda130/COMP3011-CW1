@@ -28,6 +28,7 @@ function goToAuth() {
         <RouterLink v-if="authed" to="/recipes/mine">My Recipes</RouterLink>
         <RouterLink v-if="authed" to="/recipes/suggested">Suggested</RouterLink>
         <RouterLink v-if="authed" to="/recipes/rated">Rated</RouterLink>
+        <RouterLink v-if="authed" to="/recipes/weekly-plan">Weekly Plan</RouterLink>
         <RouterLink v-if="authed" to="/recipes/create">Create</RouterLink>
       </nav>
       <button v-if="!authed" class="secondary" @click="goToAuth">Login / Register</button>

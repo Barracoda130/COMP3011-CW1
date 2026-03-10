@@ -419,6 +419,199 @@ pre {
   min-width: 0;
 }
 
+.week-plan-item {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 0.7rem;
+  align-items: center;
+}
+
+.week-plan-day {
+  width: 64px;
+  text-align: center;
+  padding: 0.35rem 0.2rem;
+  border-radius: 10px;
+  background: #22345e;
+  color: #cfe0ff;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.week-plan-main {
+  min-width: 0;
+}
+
+.week-plan-day-block {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.week-plan-day-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.week-plan-options-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.65rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.week-plan-options-grid.has-primary {
+  grid-template-columns: minmax(0, 9fr) minmax(150px, 1fr);
+}
+
+.week-plan-options-grid.anim-left-choice::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(45, 212, 191, 0.22), rgba(45, 212, 191, 0));
+  transform: translateX(-100%);
+  animation: weekly-plan-slide-left 520ms ease-out;
+}
+
+.week-plan-options-grid.anim-right-choice .week-plan-option.is-primary {
+  animation: weekly-plan-switch-grow 560ms cubic-bezier(0.2, 0.75, 0.25, 1);
+}
+
+.week-plan-options-grid.anim-right-choice .week-plan-option:not(.is-primary) {
+  animation: weekly-plan-secondary-shrink 560ms ease-out;
+}
+
+.week-plan-option {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #16223d;
+  padding: 0.75rem;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.week-plan-option-head {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.week-plan-option-head.no-image {
+  grid-template-columns: 1fr;
+}
+
+.week-plan-option-thumb {
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  object-fit: cover;
+}
+
+.week-plan-option.selected {
+  border-color: #2dd4bf;
+  box-shadow: 0 0 0 2px rgba(45, 212, 191, 0.16) inset;
+}
+
+.week-plan-option.is-primary {
+  padding: 1rem;
+  background: linear-gradient(180deg, #173253, #152845);
+}
+
+.week-plan-option.is-primary .week-plan-option-head {
+  grid-template-columns: 96px 1fr;
+}
+
+.week-plan-option.is-primary .week-plan-option-thumb {
+  width: 96px;
+  height: 96px;
+  border-radius: 12px;
+}
+
+@media (max-width: 720px) {
+  .week-plan-option.is-primary .week-plan-option-head {
+    grid-template-columns: 72px 1fr;
+  }
+
+  .week-plan-option.is-primary .week-plan-option-thumb {
+    width: 72px;
+    height: 72px;
+  }
+
+  .week-plan-options-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .week-plan-options-grid.has-primary {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+.week-plan-option:not(.is-primary) {
+  background: #111c34;
+  align-content: space-between;
+}
+
+.week-plan-options-grid.has-primary .week-plan-option:not(.is-primary) .week-plan-option-head {
+  grid-template-columns: 1fr;
+}
+
+.week-plan-main.title-only {
+  display: flex;
+  align-items: center;
+  min-height: 52px;
+}
+
+.week-plan-main.title-only a,
+.week-plan-main.title-only span {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.92rem;
+}
+
+@keyframes weekly-plan-slide-left {
+  from {
+    transform: translateX(-100%);
+    opacity: 0.9;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+@keyframes weekly-plan-switch-grow {
+  0% {
+    transform: translateX(10%) scale(0.9);
+    opacity: 0.8;
+  }
+  60% {
+    transform: translateX(-1%) scale(1.03);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes weekly-plan-secondary-shrink {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.97);
+    opacity: 0.95;
+  }
+}
+
 .my-recipe-main {
   display: grid;
   grid-template-columns: 1fr auto;
