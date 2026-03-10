@@ -29,6 +29,7 @@ const backPath = computed(() => {
   if (from === "suggested") return "/recipes/suggested";
   if (from === "rated") return "/recipes/rated";
   if (from === "mine") return "/recipes/mine";
+  if (from === "weekly-plan") return "/recipes/weekly-plan";
   return "/recipes";
 });
 const introText = computed(() => {

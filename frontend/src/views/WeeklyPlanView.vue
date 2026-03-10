@@ -9,7 +9,6 @@ const selectingDayIndex = ref(null);
 const error = ref("");
 const plan = ref(null);
 const optionDetails = ref({});
-const dayAnimation = ref({});
 
 const dayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -50,10 +49,16 @@ const dayOptions = computed(() => {
 
 function toCookPath(item) {
   if (item.recipe_source === "local" && item.recipe_id) {
-    return `/recipes/cook/local/${item.recipe_id}`;
+    return {
+      path: `/recipes/cook/local/${item.recipe_id}`,
+      query: { from: "weekly-plan" }
+    };
   }
   if (item.recipe_source === "themealdb" && item.external_recipe_id) {
-    return `/recipes/cook/themealdb/${item.external_recipe_id}`;
+    return {
+      path: `/recipes/cook/themealdb/${item.external_recipe_id}`,
+      query: { from: "weekly-plan" }
+    };
   }
   return null;
 }
@@ -125,31 +130,6 @@ function formatDate(value) {
   });
 }
 
-function getChoiceSide(dayIndex, recipeSource) {
-  const day = dayOptions.value.find((entry) => entry.dayIndex === dayIndex);
-  if (!day) {
-    return recipeSource === "local" ? "left" : "right";
-  }
-
-  const index = day.options.findIndex((option) => option.recipe_source === recipeSource);
-  if (index === 0) {
-    return "left";
-  }
-  if (index === 1) {
-    return "right";
-  }
-  return recipeSource === "local" ? "left" : "right";
-}
-
-function triggerDayAnimation(dayIndex, side) {
-  dayAnimation.value = { ...dayAnimation.value, [dayIndex]: side };
-  setTimeout(() => {
-    const next = { ...dayAnimation.value };
-    delete next[dayIndex];
-    dayAnimation.value = next;
-  }, 620);
-}
-
 async function loadCurrentPlan() {
   isLoading.value = true;
   error.value = "";
@@ -183,8 +163,6 @@ async function generatePlan() {
 }
 
 async function selectOption(dayIndex, recipeSource) {
-  const side = getChoiceSide(dayIndex, recipeSource);
-  triggerDayAnimation(dayIndex, side);
   selectingDayIndex.value = dayIndex;
   error.value = "";
   try {
@@ -267,14 +245,7 @@ onMounted(loadCurrentPlan);
               <span class="pill quick">{{ formatDate(day.plannedFor) }}</span>
             </div>
 
-            <div
-              class="week-plan-options-grid"
-              :class="{
-                'has-primary': day.hasSelection,
-                'anim-left-choice': dayAnimation[day.dayIndex] === 'left',
-                'anim-right-choice': dayAnimation[day.dayIndex] === 'right'
-              }"
-            >
+            <div class="week-plan-options-grid" :class="{ 'has-primary': day.hasSelection }">
               <article
                 v-for="option in day.options"
                 :key="option.id"

@@ -458,30 +458,12 @@ pre {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 0.65rem;
   position: relative;
-  overflow: hidden;
 }
 
 .week-plan-options-grid.has-primary {
   grid-template-columns: minmax(0, 9fr) minmax(150px, 1fr);
 }
 
-.week-plan-options-grid.anim-left-choice::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(90deg, rgba(45, 212, 191, 0.22), rgba(45, 212, 191, 0));
-  transform: translateX(-100%);
-  animation: weekly-plan-slide-left 520ms ease-out;
-}
-
-.week-plan-options-grid.anim-right-choice .week-plan-option.is-primary {
-  animation: weekly-plan-switch-grow 560ms cubic-bezier(0.2, 0.75, 0.25, 1);
-}
-
-.week-plan-options-grid.anim-right-choice .week-plan-option:not(.is-primary) {
-  animation: weekly-plan-secondary-shrink 560ms ease-out;
-}
 
 .week-plan-option {
   border: 1px solid var(--border);
@@ -573,43 +555,6 @@ pre {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.92rem;
-}
-
-@keyframes weekly-plan-slide-left {
-  from {
-    transform: translateX(-100%);
-    opacity: 0.9;
-  }
-  to {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-}
-
-@keyframes weekly-plan-switch-grow {
-  0% {
-    transform: translateX(10%) scale(0.9);
-    opacity: 0.8;
-  }
-  60% {
-    transform: translateX(-1%) scale(1.03);
-    opacity: 1;
-  }
-  100% {
-    transform: translateX(0) scale(1);
-    opacity: 1;
-  }
-}
-
-@keyframes weekly-plan-secondary-shrink {
-  0% {
-    transform: scale(1);
-    opacity: 1;
-  }
-  100% {
-    transform: scale(0.97);
-    opacity: 0.95;
-  }
 }
 
 .my-recipe-main {
