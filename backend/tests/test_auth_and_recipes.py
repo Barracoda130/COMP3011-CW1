@@ -137,6 +137,7 @@ def test_get_suggested_recipes_uses_user_rating_profile(monkeypatch) -> None:
                 "cuisine": "Italian",
                 "prep_minutes": 25,
                 "calories": 540,
+                "ingredients": ["rarebasil", "tomato"],
                 "tags": ["pasta", "tomato", "quick"],
                 "steps": "Simple tomato pasta",
             },
@@ -152,6 +153,7 @@ def test_get_suggested_recipes_uses_user_rating_profile(monkeypatch) -> None:
                 "cuisine": "Italian",
                 "prep_minutes": 30,
                 "calories": 620,
+                "ingredients": ["rarebasil", "cream"],
                 "tags": ["pasta", "creamy"],
                 "steps": "Creamy pasta",
             },
@@ -188,13 +190,16 @@ def test_get_suggested_recipes_uses_user_rating_profile(monkeypatch) -> None:
         )
         assert dislike_rating_response.status_code == 200
 
-        suggested_response = client.get("/api/v1/recipes/suggested", headers=headers)
+        suggested_response = client.get("/api/v1/recipes/suggested?local_limit=80&external_limit=1", headers=headers)
         assert suggested_response.status_code == 200
         payload = suggested_response.json()
 
         assert "score =" in payload["formula"]
         assert payload["local_count"] >= 1
         assert any(item["title"] == "Creamy Pasta" for item in payload["items"])
+        creamy = next(item for item in payload["items"] if item["title"] == "Creamy Pasta")
+        assert isinstance(creamy.get("reasons"), list)
+        assert creamy["reasons"]
 
 
 def test_suggested_recipes_excludes_already_rated(monkeypatch) -> None:
@@ -285,7 +290,7 @@ def test_suggested_recipes_excludes_already_rated(monkeypatch) -> None:
         )
         assert rate_external_response.status_code == 200
 
-        suggested_response = client.get("/api/v1/recipes/suggested", headers=headers)
+        suggested_response = client.get("/api/v1/recipes/suggested?local_limit=80&external_limit=1", headers=headers)
         assert suggested_response.status_code == 200
         suggested_items = suggested_response.json()["items"]
 
@@ -470,6 +475,98 @@ def test_suggested_recipes_uses_cache_until_new_rating(monkeypatch) -> None:
         third_suggested = client.get("/api/v1/recipes/suggested", headers=headers)
         assert third_suggested.status_code == 200
         assert call_counter["count"] > first_call_count
+
+
+def test_suggested_recipes_include_prep_and_calorie_reasons(monkeypatch) -> None:
+    email = f"test-{uuid4().hex[:8]}@example.com"
+    password = "StrongPass123"
+
+    monkeypatch.setattr(recipes_endpoints, "search_themealdb_recipes", lambda query, limit=20: [])
+
+    with TestClient(app) as client:
+        register_response = client.post(
+            "/api/v1/auth/register",
+            json={"email": email, "password": password, "full_name": "Band Preference User"},
+        )
+        assert register_response.status_code == 201
+
+        login_response = client.post(
+            "/api/v1/auth/login",
+            data={"username": email, "password": password},
+        )
+        assert login_response.status_code == 200
+        token = login_response.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        liked = client.post(
+            "/api/v1/recipes",
+            json={
+                "title": "Quick Light Bowl",
+                "cuisine": "Mediterranean",
+                "prep_minutes": 20,
+                "calories": 420,
+                "ingredients": ["chickpeas", "spinach"],
+                "tags": ["quick", "light"],
+                "steps": "Mix",
+            },
+            headers=headers,
+        )
+        assert liked.status_code == 201
+        liked_id = liked.json()["id"]
+
+        candidate = client.post(
+            "/api/v1/recipes",
+            json={
+                "title": "Fast Veg Plate",
+                "cuisine": "Mediterranean",
+                "prep_minutes": 22,
+                "calories": 430,
+                "ingredients": ["spinach", "tomato"],
+                "tags": ["quick"],
+                "steps": "Serve",
+            },
+            headers=headers,
+        )
+        assert candidate.status_code == 201
+
+        disliked = client.post(
+            "/api/v1/recipes",
+            json={
+                "title": "Slow Heavy Dish",
+                "cuisine": "American",
+                "prep_minutes": 70,
+                "calories": 880,
+                "ingredients": ["beef", "cream"],
+                "tags": ["heavy"],
+                "steps": "Cook long",
+            },
+            headers=headers,
+        )
+        assert disliked.status_code == 201
+        disliked_id = disliked.json()["id"]
+
+        like_rating = client.post(
+            f"/api/v1/recipes/{liked_id}/ratings",
+            json={"score": 5, "comment": "Great"},
+            headers=headers,
+        )
+        assert like_rating.status_code == 200
+
+        dislike_rating = client.post(
+            f"/api/v1/recipes/{disliked_id}/ratings",
+            json={"score": 1, "comment": "Too heavy"},
+            headers=headers,
+        )
+        assert dislike_rating.status_code == 200
+
+        suggested_response = client.get("/api/v1/recipes/suggested", headers=headers)
+        assert suggested_response.status_code == 200
+        payload = suggested_response.json()
+
+        matched = next(item for item in payload["items"] if item["title"] == "Fast Veg Plate")
+        reasons_text = " ".join(matched.get("reasons") or []).lower()
+        assert "prep time aligns" in reasons_text
+        assert "calorie range matches" in reasons_text
 
 
 def test_my_recipes_list_and_copy_edit_flow() -> None:

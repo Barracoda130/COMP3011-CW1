@@ -29,6 +29,13 @@ function quickFacts(recipe) {
   return facts;
 }
 
+function suggestionReasons(recipe) {
+  if (!Array.isArray(recipe.reasons)) {
+    return [];
+  }
+  return recipe.reasons.filter((reason) => typeof reason === "string" && reason.trim());
+}
+
 async function loadSuggestions() {
   isLoading.value = true;
   error.value = "";
@@ -114,6 +121,14 @@ onMounted(loadSuggestions);
                 >
                   {{ fact }}
                 </span>
+              </div>
+              <div v-if="suggestionReasons(recipe).length" class="stack" style="margin-top: 0.45rem">
+                <p class="small"><strong>Why this was suggested:</strong></p>
+                <ul class="suggestion-reasons">
+                  <li v-for="reason in suggestionReasons(recipe)" :key="`${recipe.id}-${reason}`" class="small">
+                    {{ reason }}
+                  </li>
+                </ul>
               </div>
             </div>
           </div>

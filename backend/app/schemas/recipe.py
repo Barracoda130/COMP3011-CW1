@@ -53,6 +53,7 @@ class RecipeDiscoverItem(BaseModel):
     category: str | None = None
     key_ingredients: list[str] = Field(default_factory=list)
     recommendation_score: float | None = None
+    reasons: list[str] = Field(default_factory=list)
 
 
 class RecipeDiscoverResponse(BaseModel):

@@ -29,12 +29,12 @@
 
 ## Phase 4: Recommendation Quality Upgrade
 
-- [ ] Extend taste-learning signals:
-  - [ ] liked/disliked ingredients
-  - [ ] prep-time preference bands
-  - [ ] calorie preference bands
-- [ ] Add explainable recommendations with a `reasons` list per item.
-- [ ] Expose recommendation explanations in API responses.
+- [x] Extend taste-learning signals:
+  - [x] liked/disliked ingredients
+  - [x] prep-time preference bands
+  - [x] calorie preference bands
+- [x] Add explainable recommendations with a `reasons` list per item.
+- [x] Expose recommendation explanations in API responses.
 
 ## Phase 5: Import Pipeline Enhancement
 

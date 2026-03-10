@@ -1,5 +1,5 @@
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
@@ -53,8 +53,37 @@ def _local_recipe_feature_set(recipe: Recipe) -> set[str]:
     features: set[str] = set()
     for tag in recipe.tags or []:
         features.update(_tokenize_feature(tag))
+    for ingredient in recipe.ingredients or []:
+        features.update(_tokenize_feature(ingredient))
     features.update(_tokenize_feature(recipe.cuisine or ""))
     return features
+
+
+def _ingredient_tokens(ingredients: list[str]) -> set[str]:
+    tokens: set[str] = set()
+    for ingredient in ingredients:
+        tokens.update(_tokenize_feature(ingredient))
+    return tokens
+
+
+def _prep_band(minutes: int | None) -> str | None:
+    if minutes is None:
+        return None
+    if minutes <= 25:
+        return "quick"
+    if minutes <= 45:
+        return "balanced"
+    return "slow"
+
+
+def _calorie_band(calories: int | None) -> str | None:
+    if calories is None:
+        return None
+    if calories <= 450:
+        return "light"
+    if calories <= 700:
+        return "moderate"
+    return "hearty"
 
 
 def _external_item_feature_set(item: RecipeDiscoverItem) -> set[str]:
@@ -279,8 +308,12 @@ def suggested_recipes_for_user(
     formula = (
         "score = 0.55 * Jaccard(candidate, liked_features) "
         "+ 0.30 * weighted_liked_overlap "
+        "+ 0.18 * liked_ingredient_overlap "
+        "+ 0.08 * prep_band_affinity "
+        "+ 0.08 * calorie_band_affinity "
         "- 0.30 * Jaccard(candidate, disliked_features) "
-        "- 0.20 * weighted_disliked_overlap"
+        "- 0.20 * weighted_disliked_overlap "
+        "- 0.18 * disliked_ingredient_overlap"
     )
 
     cache_entry = db.query(UserSuggestionCache).filter(UserSuggestionCache.user_id == current_user.id).first()
@@ -317,6 +350,12 @@ def suggested_recipes_for_user(
     disliked_features: set[str] = set()
     liked_feature_weights: dict[str, float] = defaultdict(float)
     disliked_feature_weights: dict[str, float] = defaultdict(float)
+    liked_ingredient_weights: dict[str, float] = defaultdict(float)
+    disliked_ingredient_weights: dict[str, float] = defaultdict(float)
+    liked_prep_bands: Counter[str] = Counter()
+    disliked_prep_bands: Counter[str] = Counter()
+    liked_calorie_bands: Counter[str] = Counter()
+    disliked_calorie_bands: Counter[str] = Counter()
 
     rated_local_ids: set[int] = set()
     rated_external_ids: set[str] = set()
@@ -334,6 +373,9 @@ def suggested_recipes_for_user(
             continue
 
         features = _local_recipe_feature_set(recipe)
+        ingredient_tokens = _ingredient_tokens(recipe.ingredients or [])
+        prep_band = _prep_band(recipe.prep_minutes)
+        calorie_band = _calorie_band(recipe.calories)
         if not features:
             continue
 
@@ -342,11 +384,23 @@ def suggested_recipes_for_user(
             liked_features.update(features)
             for feature in features:
                 liked_feature_weights[feature] += weight
+            for token in ingredient_tokens:
+                liked_ingredient_weights[token] += weight
+            if prep_band:
+                liked_prep_bands[prep_band] += 1
+            if calorie_band:
+                liked_calorie_bands[calorie_band] += 1
         elif rating.score <= 2:
             weight = float(3 - rating.score)
             disliked_features.update(features)
             for feature in features:
                 disliked_feature_weights[feature] += weight
+            for token in ingredient_tokens:
+                disliked_ingredient_weights[token] += weight
+            if prep_band:
+                disliked_prep_bands[prep_band] += 1
+            if calorie_band:
+                disliked_calorie_bands[calorie_band] += 1
 
     for rating in external_ratings:
         external_id = (rating.external_recipe_id or "").strip()
@@ -359,6 +413,9 @@ def suggested_recipes_for_user(
             continue
 
         ingredient_names = [item.get("name", "") for item in external_recipe.get("ingredients", [])]
+        ingredient_tokens = _ingredient_tokens([name for name in ingredient_names if name])
+        prep_band = _prep_band(external_recipe.get("prep_minutes"))
+        calorie_band = _calorie_band(external_recipe.get("calories"))
         features: set[str] = set()
         for tag in external_recipe.get("tags", []):
             features.update(_tokenize_feature(tag))
@@ -374,11 +431,23 @@ def suggested_recipes_for_user(
             liked_features.update(features)
             for feature in features:
                 liked_feature_weights[feature] += weight
+            for token in ingredient_tokens:
+                liked_ingredient_weights[token] += weight
+            if prep_band:
+                liked_prep_bands[prep_band] += 1
+            if calorie_band:
+                liked_calorie_bands[calorie_band] += 1
         elif rating.score <= 2:
             weight = float(3 - rating.score)
             disliked_features.update(features)
             for feature in features:
                 disliked_feature_weights[feature] += weight
+            for token in ingredient_tokens:
+                disliked_ingredient_weights[token] += weight
+            if prep_band:
+                disliked_prep_bands[prep_band] += 1
+            if calorie_band:
+                disliked_calorie_bands[calorie_band] += 1
 
     # If the user only has neutral ratings, there is no preference signal.
     if not liked_features and not disliked_features:
@@ -388,10 +457,16 @@ def suggested_recipes_for_user(
 
     local_candidates = db.query(Recipe).limit(400).all()
     local_candidate_features: dict[int, set[str]] = {}
+    local_candidate_ingredients: dict[int, set[str]] = {}
+    local_candidate_prep: dict[int, str | None] = {}
+    local_candidate_calorie: dict[int, str | None] = {}
     for recipe in local_candidates:
         if recipe.id in rated_local_ids:
             continue
         local_candidate_features[recipe.id] = _local_recipe_feature_set(recipe)
+        local_candidate_ingredients[recipe.id] = _ingredient_tokens(recipe.ingredients or [])
+        local_candidate_prep[recipe.id] = _prep_band(recipe.prep_minutes)
+        local_candidate_calorie[recipe.id] = _calorie_band(recipe.calories)
         candidate_items.append(
             RecipeDiscoverItem(
                 id=recipe.id,
@@ -440,8 +515,14 @@ def suggested_recipes_for_user(
     for item in candidate_items:
         if item.source == "local":
             candidate_features = local_candidate_features.get(int(item.id), set())
+            candidate_ingredients = local_candidate_ingredients.get(int(item.id), set())
+            prep_band = local_candidate_prep.get(int(item.id))
+            calorie_band = local_candidate_calorie.get(int(item.id))
         else:
             candidate_features = _external_item_feature_set(item)
+            candidate_ingredients = _ingredient_tokens(item.key_ingredients)
+            prep_band = _prep_band(item.prep_minutes)
+            calorie_band = _calorie_band(item.calories)
 
         if not candidate_features:
             continue
@@ -450,18 +531,61 @@ def suggested_recipes_for_user(
         disliked_jaccard = _jaccard(candidate_features, disliked_features)
         liked_overlap = _weighted_overlap(candidate_features, liked_feature_weights)
         disliked_overlap = _weighted_overlap(candidate_features, disliked_feature_weights)
+        liked_ingredient_overlap = _weighted_overlap(candidate_ingredients, liked_ingredient_weights)
+        disliked_ingredient_overlap = _weighted_overlap(candidate_ingredients, disliked_ingredient_weights)
+
+        prep_affinity = 0.0
+        if prep_band:
+            prep_affinity = float(liked_prep_bands.get(prep_band, 0) - disliked_prep_bands.get(prep_band, 0))
+
+        calorie_affinity = 0.0
+        if calorie_band:
+            calorie_affinity = float(
+                liked_calorie_bands.get(calorie_band, 0) - disliked_calorie_bands.get(calorie_band, 0)
+            )
 
         score = (
             (0.55 * liked_jaccard)
             + (0.30 * liked_overlap)
+            + (0.18 * liked_ingredient_overlap)
+            + (0.08 * prep_affinity)
+            + (0.08 * calorie_affinity)
             - (0.30 * disliked_jaccard)
             - (0.20 * disliked_overlap)
+            - (0.18 * disliked_ingredient_overlap)
         )
 
         if score <= 0:
             continue
 
+        reasons: list[str] = []
+        if prep_band and liked_prep_bands.get(prep_band, 0) > disliked_prep_bands.get(prep_band, 0):
+            reasons.append(f"Prep time aligns with your {prep_band} cooking preference")
+
+        if calorie_band and liked_calorie_bands.get(calorie_band, 0) > disliked_calorie_bands.get(calorie_band, 0):
+            reasons.append(f"Calorie range matches your {calorie_band} meal preference")
+
+        top_liked_features = sorted(
+            (feature for feature in candidate_features if feature in liked_feature_weights),
+            key=lambda feature: liked_feature_weights[feature],
+            reverse=True,
+        )
+        if top_liked_features:
+            reasons.append(f"Matches your liked flavors: {', '.join(top_liked_features[:3])}")
+
+        top_ingredients = sorted(
+            (token for token in candidate_ingredients if token in liked_ingredient_weights),
+            key=lambda token: liked_ingredient_weights[token],
+            reverse=True,
+        )
+        if top_ingredients:
+            reasons.append(f"Uses ingredients you rate highly: {', '.join(top_ingredients[:2])}")
+
+        if not reasons:
+            reasons.append("Overall profile is close to your positively rated recipes")
+
         item.recommendation_score = round(score, 4)
+        item.reasons = reasons[:4]
         scored_items.append(item)
 
     scored_items.sort(key=lambda item: item.recommendation_score or 0.0, reverse=True)

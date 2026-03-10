@@ -595,6 +595,21 @@ pre {
   gap: 0.35rem;
 }
 
+.suggestion-reasons {
+  margin: 0;
+  padding-left: 1rem;
+  display: grid;
+  gap: 0.22rem;
+}
+
+.suggestion-reasons li {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+}
+
 .pill.quick {
   background: #213055;
   color: #d1ddf7;
