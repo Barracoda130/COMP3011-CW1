@@ -6,7 +6,6 @@ import { api } from "../services/api";
 const items = ref([]);
 const localCount = ref(0);
 const externalCount = ref(0);
-const formula = ref("");
 const error = ref("");
 const isLoading = ref(false);
 
@@ -38,7 +37,6 @@ async function loadSuggestions() {
     items.value = response.items;
     localCount.value = response.local_count;
     externalCount.value = response.external_count;
-    formula.value = response.formula;
   } catch (err) {
     error.value = err.message;
   } finally {
@@ -63,10 +61,6 @@ onMounted(loadSuggestions);
       <button class="secondary" type="button" :disabled="isLoading" @click="loadSuggestions">
         {{ isLoading ? "Refreshing..." : "Refresh Suggestions" }}
       </button>
-
-      <p v-if="formula" class="small">
-        <strong>Scoring formula:</strong> {{ formula }}
-      </p>
 
       <div class="summary">
         <span class="pill local">Local: {{ localCount }}</span>

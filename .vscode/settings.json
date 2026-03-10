@@ -8,6 +8,10 @@
         ".\\.venv\\Scripts\\python.exe": true,
         "pytest": true,
         "npm run build": true,
-        ".\\.venv\\Scripts\\python": true
+        ".\\.venv\\Scripts\\python": true,
+        "/^Set-Location \"c:\\\\Users\\\\lcomp\\\\Documents\\\\Uni-Computer-Science\\\\3011-Web-Services\\\\COMP3011-CW1\\\\frontend\"; cmd /c npm run build$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
     }
 }
