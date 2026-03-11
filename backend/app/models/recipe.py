@@ -26,3 +26,8 @@ class Recipe(Base):
     owner = relationship("User", back_populates="recipes")
     ratings = relationship("RecipeRating", back_populates="recipe", cascade="all, delete-orphan")
     weekly_plan_items = relationship("WeeklyPlanItem", back_populates="recipe")
+    recipe_ingredients = relationship("RecipeIngredient", back_populates="recipe", cascade="all, delete-orphan")
+    recipe_tags = relationship("RecipeTag", back_populates="recipe", cascade="all, delete-orphan")
+    feedback = relationship("RecipeFeedback", back_populates="recipe", cascade="all, delete-orphan")
+    nutrition_facts = relationship("RecipeNutrition", back_populates="recipe", cascade="all, delete-orphan")
+    events = relationship("UserRecipeEvent", back_populates="recipe", cascade="all, delete-orphan")

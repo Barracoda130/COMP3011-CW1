@@ -30,6 +30,7 @@ from app.schemas.recipe import (
     RecipeUpdate,
 )
 from app.schemas.rating import ExternalRatingRead, RatingCreate, RatingRead
+from app.services.recipe_normalization import sync_recipe_entities, upsert_recipe_feedback
 from app.services.recipe_import import RecipeImportError, extract_recipe_from_url
 from app.services.themealdb import get_themealdb_recipe_by_id, search_themealdb_recipes
 
@@ -853,6 +854,8 @@ def create_recipe(
 
     recipe = Recipe(owner_id=current_user.id, **payload_data)
     db.add(recipe)
+    db.flush()
+    sync_recipe_entities(db, recipe)
     db.commit()
     db.refresh(recipe)
     return recipe
@@ -899,6 +902,8 @@ def create_modified_recipe_copy(
     )
 
     db.add(copied_recipe)
+    db.flush()
+    sync_recipe_entities(db, copied_recipe)
     db.commit()
     db.refresh(copied_recipe)
     return copied_recipe
@@ -931,6 +936,9 @@ def update_recipe(
 
     for key, value in updated_data.items():
         setattr(recipe, key, value)
+
+    if "ingredients" in updated_data or "tags" in updated_data:
+        sync_recipe_entities(db, recipe)
 
     db.commit()
     db.refresh(recipe)
@@ -989,6 +997,14 @@ def rate_recipe(
     recipe.average_rating = round(float(average_score if average_score is not None else payload.score), 2)
 
     _mark_suggestions_stale(db, current_user.id)
+    upsert_recipe_feedback(
+        db,
+        user_id=current_user.id,
+        recipe_id=recipe_id,
+        score=payload.score,
+        comment=payload.comment,
+        context="local-rating",
+    )
 
     db.commit()
     db.refresh(rating)

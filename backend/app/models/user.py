@@ -24,3 +24,5 @@ class User(Base):
         "UserSuggestionCache", back_populates="user", cascade="all, delete-orphan", uselist=False
     )
     weekly_plans = relationship("WeeklyPlan", back_populates="user", cascade="all, delete-orphan")
+    recipe_feedback = relationship("RecipeFeedback", back_populates="user", cascade="all, delete-orphan")
+    recipe_events = relationship("UserRecipeEvent", back_populates="user", cascade="all, delete-orphan")
