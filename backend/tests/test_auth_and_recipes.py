@@ -195,6 +195,9 @@ def test_get_suggested_recipes_uses_user_rating_profile(monkeypatch) -> None:
         payload = suggested_response.json()
 
         assert "score =" in payload["formula"]
+        assert "prep_time_proximity" in payload["formula"]
+        assert "calorie_proximity" in payload["formula"]
+        assert "macro_band_affinity" in payload["formula"]
         assert payload["local_count"] >= 1
         assert any(item["title"] == "Creamy Pasta" for item in payload["items"])
         creamy = next(item for item in payload["items"] if item["title"] == "Creamy Pasta")

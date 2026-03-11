@@ -16,6 +16,21 @@ def init_db() -> None:
     with engine.begin() as connection:
         tables = connection.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
         table_names = {row[0] for row in tables}
+
+        if "recipes" in table_names:
+            recipe_columns = connection.execute(text("PRAGMA table_info('recipes')")).fetchall()
+            recipe_column_names = {row[1] for row in recipe_columns}
+            if "protein_g" not in recipe_column_names:
+                connection.execute(text("ALTER TABLE recipes ADD COLUMN protein_g FLOAT"))
+            if "carbs_g" not in recipe_column_names:
+                connection.execute(text("ALTER TABLE recipes ADD COLUMN carbs_g FLOAT"))
+            if "fat_g" not in recipe_column_names:
+                connection.execute(text("ALTER TABLE recipes ADD COLUMN fat_g FLOAT"))
+            if "allergens" not in recipe_column_names:
+                connection.execute(text("ALTER TABLE recipes ADD COLUMN allergens JSON"))
+            if "cost_estimate" not in recipe_column_names:
+                connection.execute(text("ALTER TABLE recipes ADD COLUMN cost_estimate FLOAT"))
+
         if "weekly_plan_items" not in table_names:
             return
 

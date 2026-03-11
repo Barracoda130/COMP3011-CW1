@@ -185,6 +185,74 @@ def _calorie_band(calories: int | None) -> str | None:
     return "hearty"
 
 
+def _macro_profile_band(protein_g: float | None, carbs_g: float | None, fat_g: float | None) -> str | None:
+    if protein_g is None or carbs_g is None or fat_g is None:
+        return None
+
+    total = protein_g + carbs_g + fat_g
+    if total <= 0:
+        return None
+
+    protein_ratio = protein_g / total
+    carbs_ratio = carbs_g / total
+    fat_ratio = fat_g / total
+
+    if protein_ratio >= 0.35:
+        return "protein-forward"
+    if carbs_ratio >= 0.5:
+        return "carb-forward"
+    if fat_ratio >= 0.4:
+        return "fat-forward"
+    return "balanced-macros"
+
+
+def _median_value(values: list[float]) -> float | None:
+    if not values:
+        return None
+    sorted_values = sorted(values)
+    mid = len(sorted_values) // 2
+    if len(sorted_values) % 2 == 0:
+        return (sorted_values[mid - 1] + sorted_values[mid]) / 2.0
+    return sorted_values[mid]
+
+
+def _proximity_score(candidate: float | None, preferred_values: list[float], tolerance: float) -> float:
+    if candidate is None or not preferred_values or tolerance <= 0:
+        return 0.0
+    preferred_center = _median_value(preferred_values)
+    if preferred_center is None:
+        return 0.0
+    distance = abs(candidate - preferred_center)
+    return max(0.0, 1.0 - (distance / tolerance))
+
+
+def _proximity_affinity(
+    candidate: float | None,
+    liked_values: list[float],
+    disliked_values: list[float],
+    tolerance: float,
+) -> float:
+    liked = _proximity_score(candidate, liked_values, tolerance)
+    disliked = _proximity_score(candidate, disliked_values, tolerance)
+    return liked - disliked
+
+
+def _to_float(value: object) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            return float(stripped)
+        except ValueError:
+            return None
+    return None
+
+
 def _external_item_feature_set(item: RecipeDiscoverItem) -> set[str]:
     features: set[str] = set()
     for tag in item.tags:
@@ -386,6 +454,11 @@ def get_recipe_for_cooking(
             ingredients=[RecipeCookIngredient(name=item, measure=None) for item in (recipe.ingredients or [])],
             prep_minutes=recipe.prep_minutes,
             calories=recipe.calories,
+            protein_g=recipe.protein_g,
+            carbs_g=recipe.carbs_g,
+            fat_g=recipe.fat_g,
+            allergens=recipe.allergens or [],
+            cost_estimate=recipe.cost_estimate,
         )
 
     if normalized_source == "themealdb":
@@ -410,6 +483,9 @@ def suggested_recipes_for_user(
         "+ 0.18 * liked_ingredient_overlap "
         "+ 0.08 * prep_band_affinity "
         "+ 0.08 * calorie_band_affinity "
+        "+ 0.06 * prep_time_proximity "
+        "+ 0.06 * calorie_proximity "
+        "+ 0.06 * macro_band_affinity "
         "- 0.30 * Jaccard(candidate, disliked_features) "
         "- 0.20 * weighted_disliked_overlap "
         "- 0.18 * disliked_ingredient_overlap"
@@ -455,6 +531,12 @@ def suggested_recipes_for_user(
     disliked_prep_bands: Counter[str] = Counter()
     liked_calorie_bands: Counter[str] = Counter()
     disliked_calorie_bands: Counter[str] = Counter()
+    liked_macro_bands: Counter[str] = Counter()
+    disliked_macro_bands: Counter[str] = Counter()
+    liked_prep_minutes: list[float] = []
+    disliked_prep_minutes: list[float] = []
+    liked_calories: list[float] = []
+    disliked_calories: list[float] = []
 
     rated_local_ids: set[int] = set()
     rated_external_ids: set[str] = set()
@@ -475,6 +557,7 @@ def suggested_recipes_for_user(
         ingredient_profile = _ingredient_profile(recipe.ingredients or [])
         prep_band = _prep_band(recipe.prep_minutes)
         calorie_band = _calorie_band(recipe.calories)
+        macro_band = _macro_profile_band(recipe.protein_g, recipe.carbs_g, recipe.fat_g)
         if not features:
             continue
 
@@ -487,8 +570,14 @@ def suggested_recipes_for_user(
                 liked_ingredient_weights[token] += weight * quantity
             if prep_band:
                 liked_prep_bands[prep_band] += 1
+            if recipe.prep_minutes is not None:
+                liked_prep_minutes.append(float(recipe.prep_minutes))
             if calorie_band:
                 liked_calorie_bands[calorie_band] += 1
+            if recipe.calories is not None:
+                liked_calories.append(float(recipe.calories))
+            if macro_band:
+                liked_macro_bands[macro_band] += 1
         elif rating.score <= 2:
             weight = float(3 - rating.score)
             disliked_features.update(features)
@@ -498,8 +587,14 @@ def suggested_recipes_for_user(
                 disliked_ingredient_weights[token] += weight * quantity
             if prep_band:
                 disliked_prep_bands[prep_band] += 1
+            if recipe.prep_minutes is not None:
+                disliked_prep_minutes.append(float(recipe.prep_minutes))
             if calorie_band:
                 disliked_calorie_bands[calorie_band] += 1
+            if recipe.calories is not None:
+                disliked_calories.append(float(recipe.calories))
+            if macro_band:
+                disliked_macro_bands[macro_band] += 1
 
     for rating in external_ratings:
         external_id = (rating.external_recipe_id or "").strip()
@@ -534,8 +629,14 @@ def suggested_recipes_for_user(
                 liked_ingredient_weights[token] += weight * quantity
             if prep_band:
                 liked_prep_bands[prep_band] += 1
+            prep_minutes = _to_float(external_recipe.get("prep_minutes"))
+            if prep_minutes is not None:
+                liked_prep_minutes.append(prep_minutes)
             if calorie_band:
                 liked_calorie_bands[calorie_band] += 1
+            calories = _to_float(external_recipe.get("calories"))
+            if calories is not None:
+                liked_calories.append(calories)
         elif rating.score <= 2:
             weight = float(3 - rating.score)
             disliked_features.update(features)
@@ -545,8 +646,14 @@ def suggested_recipes_for_user(
                 disliked_ingredient_weights[token] += weight * quantity
             if prep_band:
                 disliked_prep_bands[prep_band] += 1
+            prep_minutes = _to_float(external_recipe.get("prep_minutes"))
+            if prep_minutes is not None:
+                disliked_prep_minutes.append(prep_minutes)
             if calorie_band:
                 disliked_calorie_bands[calorie_band] += 1
+            calories = _to_float(external_recipe.get("calories"))
+            if calories is not None:
+                disliked_calories.append(calories)
 
     # If the user only has neutral ratings, there is no preference signal.
     if not liked_features and not disliked_features:
@@ -559,6 +666,7 @@ def suggested_recipes_for_user(
     local_candidate_ingredient_profiles: dict[int, dict[str, float]] = {}
     local_candidate_prep: dict[int, str | None] = {}
     local_candidate_calorie: dict[int, str | None] = {}
+    local_candidate_macro_band: dict[int, str | None] = {}
     rarity_profiles: list[dict[str, float]] = []
     for recipe in local_candidates:
         if recipe.id in rated_local_ids:
@@ -568,6 +676,7 @@ def suggested_recipes_for_user(
         rarity_profiles.append(local_candidate_ingredient_profiles[recipe.id])
         local_candidate_prep[recipe.id] = _prep_band(recipe.prep_minutes)
         local_candidate_calorie[recipe.id] = _calorie_band(recipe.calories)
+        local_candidate_macro_band[recipe.id] = _macro_profile_band(recipe.protein_g, recipe.carbs_g, recipe.fat_g)
         candidate_items.append(
             RecipeDiscoverItem(
                 id=recipe.id,
@@ -624,11 +733,13 @@ def suggested_recipes_for_user(
             candidate_ingredient_profile = local_candidate_ingredient_profiles.get(int(item.id), {})
             prep_band = local_candidate_prep.get(int(item.id))
             calorie_band = local_candidate_calorie.get(int(item.id))
+            macro_band = local_candidate_macro_band.get(int(item.id))
         else:
             candidate_features = _external_item_feature_set(item)
             candidate_ingredient_profile = _ingredient_profile(item.key_ingredients)
             prep_band = _prep_band(item.prep_minutes)
             calorie_band = _calorie_band(item.calories)
+            macro_band = None
 
         if not candidate_features:
             continue
@@ -658,12 +769,32 @@ def suggested_recipes_for_user(
                 liked_calorie_bands.get(calorie_band, 0) - disliked_calorie_bands.get(calorie_band, 0)
             )
 
+        prep_proximity_affinity = _proximity_affinity(
+            _to_float(item.prep_minutes),
+            liked_prep_minutes,
+            disliked_prep_minutes,
+            tolerance=20.0,
+        )
+        calorie_proximity_affinity = _proximity_affinity(
+            _to_float(item.calories),
+            liked_calories,
+            disliked_calories,
+            tolerance=220.0,
+        )
+
+        macro_affinity = 0.0
+        if macro_band:
+            macro_affinity = float(liked_macro_bands.get(macro_band, 0) - disliked_macro_bands.get(macro_band, 0))
+
         score = (
             (0.55 * liked_jaccard)
             + (0.30 * liked_overlap)
             + (0.18 * liked_ingredient_overlap)
             + (0.08 * prep_affinity)
             + (0.08 * calorie_affinity)
+            + (0.06 * prep_proximity_affinity)
+            + (0.06 * calorie_proximity_affinity)
+            + (0.06 * macro_affinity)
             - (0.30 * disliked_jaccard)
             - (0.20 * disliked_overlap)
             - (0.18 * disliked_ingredient_overlap)
@@ -678,6 +809,9 @@ def suggested_recipes_for_user(
 
         if calorie_band and liked_calorie_bands.get(calorie_band, 0) > disliked_calorie_bands.get(calorie_band, 0):
             reasons.append(f"Calorie range matches your {calorie_band} meal preference")
+
+        if macro_band and liked_macro_bands.get(macro_band, 0) > disliked_macro_bands.get(macro_band, 0):
+            reasons.append(f"Macro balance matches your {macro_band} preference")
 
         top_liked_features = sorted(
             (feature for feature in candidate_features if feature in liked_feature_weights),
@@ -850,6 +984,7 @@ def create_recipe(
 ) -> Recipe:
     payload_data = payload.model_dump()
     payload_data["cuisine"] = _normalized_cuisine(payload_data.get("cuisine"))
+    payload_data["allergens"] = payload_data.get("allergens") or []
 
     recipe = Recipe(owner_id=current_user.id, **payload_data)
     db.add(recipe)
@@ -890,6 +1025,11 @@ def create_modified_recipe_copy(
         cuisine=_normalized_cuisine(overrides.get("cuisine", source_recipe.cuisine)),
         prep_minutes=overrides.get("prep_minutes", source_recipe.prep_minutes),
         calories=overrides.get("calories", source_recipe.calories),
+        protein_g=overrides.get("protein_g", source_recipe.protein_g),
+        carbs_g=overrides.get("carbs_g", source_recipe.carbs_g),
+        fat_g=overrides.get("fat_g", source_recipe.fat_g),
+        allergens=overrides.get("allergens", source_recipe.allergens) or [],
+        cost_estimate=overrides.get("cost_estimate", source_recipe.cost_estimate),
         intro=overrides.get("intro", source_recipe.intro),
         image_url=overrides.get("image_url", source_recipe.image_url),
         ingredients=overrides.get("ingredients", source_recipe.ingredients),

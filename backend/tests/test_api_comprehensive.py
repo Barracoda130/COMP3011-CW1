@@ -141,6 +141,11 @@ def test_recipe_create_validation_and_public_listing() -> None:
                 "cuisine": "",
                 "prep_minutes": 15,
                 "calories": 450,
+                "protein_g": 28.0,
+                "carbs_g": 32.0,
+                "fat_g": 14.0,
+                "allergens": ["gluten"],
+                "cost_estimate": 7.25,
                 "ingredients": ["2 eggs", "1 cup flour"],
                 "tags": ["quick"],
                 "steps": "A valid recipe",
@@ -150,6 +155,9 @@ def test_recipe_create_validation_and_public_listing() -> None:
         assert create_response.status_code == 201
         assert create_response.json()["cuisine"] == "Unknown"
         assert create_response.json()["ingredients"] == ["2 eggs", "1 cup flour"]
+        assert create_response.json()["protein_g"] == 28.0
+        assert create_response.json()["allergens"] == ["gluten"]
+        assert create_response.json()["cost_estimate"] == 7.25
 
         cook_response = client.get(f"/api/v1/recipes/cook/local/{create_response.json()['id']}")
         assert cook_response.status_code == 200
@@ -157,6 +165,9 @@ def test_recipe_create_validation_and_public_listing() -> None:
             {"name": "2 eggs", "measure": None},
             {"name": "1 cup flour", "measure": None},
         ]
+        assert cook_response.json()["protein_g"] == 28.0
+        assert cook_response.json()["carbs_g"] == 32.0
+        assert cook_response.json()["fat_g"] == 14.0
 
         invalid_prep_response = client.post(
             "/api/v1/recipes",

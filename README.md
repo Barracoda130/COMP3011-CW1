@@ -14,6 +14,8 @@ Full-stack recipe application built with a FastAPI backend and a Vue 3 frontend.
 - Weekly Plan generation and retrieval with per-day dual options (`local` + `themealdb`) and user selection state
 - Weekly-plan constraints (cuisine cap, non-consecutive main ingredient, weekday quick bias, weekend flexible/treat bias)
 - URL import parser mapped to `intro`, `ingredients`, and `steps`
+- Curated public-dataset import script for Food.com-style records with optional USDA-style nutrition enrichment
+- Nutrition enrichment support for recipes: `protein_g`, `carbs_g`, `fat_g`, `allergens`, `cost_estimate`
 - Alembic migrations for baseline and weekly-plan schema evolution
 - Backend and frontend automated tests
 - Deployment runbook and exported API documentation PDF
@@ -58,6 +60,78 @@ Why this choice:
 - `backend/`: API, models, schemas, services, tests
 - `frontend/`: Vue application, routes, views, API client, frontend tests
 - `package.json` (root): helper script to run backend + frontend together
+
+## Curated Dataset Import (Coursework-Friendly)
+
+The backend includes a lightweight importer that can seed the existing `recipes` table from a curated subset of a public dataset.
+
+Design goals:
+
+- Reuse the existing schema and keep all current features working.
+- Support Food.com-style recipe records.
+- Optionally enrich calories/macros/allergens/cost from a USDA-style sidecar file.
+- Avoid heavy ETL tooling and keep the workflow script-based.
+
+### Import command
+
+From `backend/`:
+
+```powershell
+python scripts/import_curated_recipes.py --source path\to\recipes.jsonl --limit 250
+```
+
+Optional enrichment:
+
+```powershell
+python scripts/import_curated_recipes.py --source path\to\recipes.jsonl --usda path\to\nutrition.jsonl --limit 250
+```
+
+Useful flags:
+
+- `--dry-run` parse/map only, no database writes
+- `--owner-email` imported recipe owner account (default: `dataset-importer@local`)
+- `--owner-name` imported recipe owner display name
+- `--allow-duplicates` disable duplicate skipping by `(title, cuisine)`
+- `--source-tag` tag added to imported recipes (default: `dataset:foodcom`)
+
+### Expected source formats
+
+The importer accepts `.jsonl`, `.ndjson`, `.json`, and `.csv`.
+
+Food.com-style recipe fields (recommended):
+
+- `id` or `recipe_id` (string/int)
+- `name` or `title`
+- `minutes`
+- `ingredients` (list or list-like string)
+- `steps` (list or list-like string)
+- `tags` (list or list-like string)
+- `nutrition` (list; first value treated as calories)
+- optional: `description`, `cuisine`, `image_url`
+
+USDA-style enrichment sidecar (optional):
+
+- `recipe_id` (or `id`) matching the recipe source id
+- `calories_kcal` (or `calories`)
+- optional: `protein_g`, `carbs_g`, `fat_g`, `allergens`, `cost_estimate`
+
+### Mapping into existing schema
+
+Imported records are mapped directly into the current `recipes` table:
+
+- `name/title -> recipes.title`
+- `minutes -> recipes.prep_minutes` (default `30` if missing)
+- `nutrition[0]` or USDA calories -> `recipes.calories`
+- `nutrition` array and/or USDA sidecar -> `recipes.protein_g`, `recipes.carbs_g`, `recipes.fat_g`
+- source allergens -> `recipes.allergens`
+- source cost fields -> `recipes.cost_estimate`
+- `description -> recipes.intro`
+- `steps -> recipes.steps` (joined as newline text)
+- `ingredients -> recipes.ingredients` (JSON array)
+- `tags -> recipes.tags` plus source tag (for provenance)
+- `cuisine -> recipes.cuisine` (fallback `Unknown`)
+
+No schema redesign is required for this import flow.
 
 ## Prerequisites
 
@@ -158,7 +232,7 @@ npm run build
 
 Implemented model highlights:
 
-- `recipes` stores `intro`, `steps`, `ingredients`, `tags`, and rating aggregates.
+- `recipes` stores `intro`, `steps`, `ingredients`, `tags`, nutrition fields, and rating aggregates.
 - `weekly_plans` and `weekly_plan_items` are implemented and used by live endpoints.
 - `recipe_ratings` and `external_recipe_ratings` are both implemented for local and TheMealDB rating flows.
 - `user_suggestion_cache` persists generated recommendation payloads and staleness metadata.
@@ -188,6 +262,11 @@ Potential future model work:
 - `cuisine` (indexed)
 - `prep_minutes`
 - `calories`
+- `protein_g`
+- `carbs_g`
+- `fat_g`
+- `allergens` (JSON)
+- `cost_estimate`
 - `intro`
 - `steps`
 - `image_url`
@@ -275,6 +354,13 @@ Potential future model work:
 - Most recipe-modifying operations require bearer auth
 - Discover endpoints are public
 - Health endpoint is public and remains directly accessible by URL
+
+## Documentation Artifacts
+
+- Data sources and data flow: `docs/data-sources.md`
+- Architecture and recommendation flow: `docs/architecture-and-recommendation.md`
+- Deployment runbook: `docs/deployment-runbook.md`
+- Static API overview PDF: `docs/api-documentation.pdf`
 
 ## API Endpoint Examples
 

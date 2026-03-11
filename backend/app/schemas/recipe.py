@@ -6,6 +6,11 @@ class RecipeBase(BaseModel):
     cuisine: str | None = Field(default=None, max_length=60)
     prep_minutes: int = Field(ge=1, le=600)
     calories: int | None = Field(default=None, ge=0)
+    protein_g: float | None = Field(default=None, ge=0)
+    carbs_g: float | None = Field(default=None, ge=0)
+    fat_g: float | None = Field(default=None, ge=0)
+    allergens: list[str] | None = None
+    cost_estimate: float | None = Field(default=None, ge=0)
     intro: str | None = None
     image_url: str | None = Field(default=None, max_length=1_000_000)
     ingredients: list[str] = Field(default_factory=list)
@@ -22,6 +27,11 @@ class RecipeUpdate(BaseModel):
     cuisine: str | None = Field(default=None, max_length=60)
     prep_minutes: int | None = Field(default=None, ge=1, le=600)
     calories: int | None = Field(default=None, ge=0)
+    protein_g: float | None = Field(default=None, ge=0)
+    carbs_g: float | None = Field(default=None, ge=0)
+    fat_g: float | None = Field(default=None, ge=0)
+    allergens: list[str] | None = None
+    cost_estimate: float | None = Field(default=None, ge=0)
     intro: str | None = None
     image_url: str | None = Field(default=None, max_length=1_000_000)
     ingredients: list[str] | None = None
@@ -97,6 +107,11 @@ class RecipeCookRead(BaseModel):
     ingredients: list[RecipeCookIngredient] = Field(default_factory=list)
     prep_minutes: int | None = None
     calories: int | None = None
+    protein_g: float | None = None
+    carbs_g: float | None = None
+    fat_g: float | None = None
+    allergens: list[str] = Field(default_factory=list)
+    cost_estimate: float | None = None
 
 
 class RecipeImportRequest(BaseModel):
