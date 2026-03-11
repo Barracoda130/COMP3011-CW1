@@ -59,10 +59,10 @@
 
 ## Phase 8: Documentation and Delivery Artifacts
 
-- [ ] Update README schema and endpoint examples to match current API shape.
-- [ ] Add architecture + recommendation flow summary.
-- [ ] Export API documentation to PDF and link it in README.
-- [ ] Add deployment runbook (env vars, migrate, seed, start).
+- [x] Update README schema and endpoint examples to match current API shape.
+- [x] Add architecture + recommendation flow summary.
+- [x] Export API documentation to PDF and link it in README.
+- [x] Add deployment runbook (env vars, migrate, seed, start).
 
 ## Phase 9: Viva Preparation
 

@@ -1,0 +1,68 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Count 1 /Kids [3 0 R] >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Length 1051 >>
+stream
+BT
+/F1 10 Tf
+50 790 Td
+14 TL
+(Meal Planner Pro API Documentation) Tj
+T* (Base URL: /api/v1) Tj
+T* () Tj
+T* (Auth) Tj
+T* (POST /auth/register) Tj
+T* (POST /auth/login) Tj
+T* (GET /auth/me) Tj
+T* () Tj
+T* (Recipes) Tj
+T* (GET /recipes) Tj
+T* (GET /recipes/mine) Tj
+T* (GET /recipes/discover) Tj
+T* (GET /recipes/cook/{source}/{recipe_id}) Tj
+T* (GET /recipes/suggested) Tj
+T* (GET /recipes/rated) Tj
+T* (POST /recipes) Tj
+T* (POST /recipes/import-url) Tj
+T* (POST /recipes/{recipe_id}/copy) Tj
+T* (GET /recipes/{recipe_id}) Tj
+T* (PUT /recipes/{recipe_id}) Tj
+T* (DELETE /recipes/{recipe_id}) Tj
+T* (POST /recipes/{recipe_id}/ratings) Tj
+T* (GET /recipes/{recipe_id}/ratings/me) Tj
+T* (POST /recipes/themealdb/{external_recipe_id}/ratings) Tj
+T* (GET /recipes/themealdb/{external_recipe_id}/ratings/me) Tj
+T* () Tj
+T* (Users Weekly Plan) Tj
+T* (POST /users/me/weekly-plan/generate) Tj
+T* (GET /users/me/weekly-plan/current) Tj
+T* (POST /users/me/weekly-plan/current/select) Tj
+T* () Tj
+T* (For full interactive schema, run backend and open /docs.) Tj
+ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000000311 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1414
+%%EOF
