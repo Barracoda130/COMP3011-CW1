@@ -1,6 +1,6 @@
 # Deployment Runbook
 
-This runbook describes environment setup, migration, optional seed, and startup for local or server deployment.
+This runbook describes environment setup, migration, optional baseline data, and startup for local or server deployment.
 
 ## 1. Environment Variables
 
@@ -39,7 +39,7 @@ cd backend
 
 Current setup does not require mandatory seed scripts.
 
-- If you want demo data, create recipes through API/UI after startup.
+- If you want demo data, create recipes through the API/UI after startup.
 - Keep `meal_api.db` backed up before bulk data operations.
 
 ## 5. Start Services
@@ -64,9 +64,11 @@ npm.cmd run dev
 
 - `GET /api/v1/health` returns `200`.
 - Login/register works.
-- Discover endpoint returns local/external recipes.
-- Suggested endpoint returns formula and reasons.
-- Weekly plan generate/current/select endpoints work for authenticated users.
+- Discover endpoint returns local and TheMealDB recipes.
+- Suggested endpoint returns formula and explainability reasons.
+- Weekly Plan generation endpoint works: `POST /api/v1/users/me/weekly-plan/generate`.
+- Weekly Plan retrieval endpoint works: `GET /api/v1/users/me/weekly-plan/current`.
+- Weekly Plan selection endpoint works: `POST /api/v1/users/me/weekly-plan/current/select`.
 
 ## 7. Rollback Notes
 
@@ -77,3 +79,9 @@ npm.cmd run dev
 cd backend
 .\.venv\Scripts\python.exe -m alembic downgrade -1
 ```
+
+## 8. Documentation Alignment
+
+- Repository overview: `README.md`
+- Architecture and recommendation flow: `docs/architecture-and-recommendation.md`
+- API PDF artifact: `docs/api-documentation.pdf`

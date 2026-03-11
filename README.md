@@ -2,25 +2,27 @@
 
 Full-stack recipe application built with a FastAPI backend and a Vue 3 frontend.
 
-## Scope (MVP vs Stretch)
+## Feature Status
 
-### MVP (submission-critical)
+### Implemented Features
 
-- Authentication and protected recipe actions
-- CRUD for local recipes
-- Discover + cook flows for local and external recipes
-- Ratings for local and external recipes
-- Suggested recipes based on user rating history
-- Import from URL into structured recipe fields (`intro`, `ingredients`, `steps`)
-- Automated tests and runnable local setup
+- Authentication and protected actions (register, login, JWT bearer auth, current-user endpoint)
+- Local recipe CRUD with copy-on-edit flow
+- Public discover and cook flows for local and TheMealDB recipes
+- Rating support for local and TheMealDB recipes (including duplicate-rating protection)
+- Personalized suggestions with weighted scoring and explainable `reasons`
+- Weekly Plan generation and retrieval with per-day dual options (`local` + `themealdb`) and user selection state
+- Weekly-plan constraints (cuisine cap, non-consecutive main ingredient, weekday quick bias, weekend flexible/treat bias)
+- URL import parser mapped to `intro`, `ingredients`, and `steps`
+- Alembic migrations for baseline and weekly-plan schema evolution
+- Backend and frontend automated tests
+- Deployment runbook and exported API documentation PDF
 
-### Stretch (time permitting)
+### Optional Future Work
 
-- Weekly plan generation with day-level constraints
-- Stronger taste-profile learning (prep-time/calorie bands + richer ingredient preferences)
-- Explainable recommendation reasons in API responses and UI
-- Video import (captions-first, manual transcript fallback)
-- Formal migration workflow (Alembic) replacing startup schema patching
+- Video import pipeline (captions-first) and manual transcript fallback
+- More complete removal of startup SQLite compatibility patching once migration-only startup is enforced
+- Additional recommendation model enhancements beyond the current weighted heuristic approach
 
 ## Overview
 
@@ -30,7 +32,8 @@ The project provides:
 - Local recipe management (create, edit, delete, copy-on-edit)
 - Discover recipes from local storage and TheMealDB
 - Cooking workflow page with checklist-style ingredients and rating UI
-- Personal recommendation flow with cached suggestion results
+- Personal recommendation flow with cached suggestion results and explanation reasons
+- Weekly Plan with one local and one TheMealDB option per day, including persisted user selection
 - Rated recipes and My Recipes management pages
 
 ## Tech Stack
@@ -149,19 +152,19 @@ npm run build
 - `backend/app/db/init_db.py` also applies lightweight schema backfills for incremental changes
 - Legacy recipe text in `description` is backfilled into `steps` on startup
 
-## Target Data Model Changes
+## Data Model Status
 
-Target additions for next phases:
+Implemented model highlights:
 
-- `weekly_plans` table for per-user generated plans.
-- `weekly_plan_items` table for day-level plan entries and ordering.
-- `taste_profiles` (or `user_preference_snapshots`) for persisted preference signals.
-- `recommendation_reasons` payload support in suggested results (stored or computed).
+- `recipes` stores `intro`, `steps`, `ingredients`, `tags`, and rating aggregates.
+- `weekly_plans` and `weekly_plan_items` are implemented and used by live endpoints.
+- `recipe_ratings` and `external_recipe_ratings` are both implemented for local and TheMealDB rating flows.
+- `user_suggestion_cache` persists generated recommendation payloads and staleness metadata.
 
-Current recipe model direction:
+Potential future model work:
 
-- Keep `recipes` with `intro`, `steps`, `ingredients`, and `tags`.
-- Continue to evaluate normalization (`ingredients` and `tags`) as a post-MVP enhancement.
+- Optional normalization of ingredients/tags into dedicated relational tables if query/reporting needs grow.
+- Optional persisted taste-profile snapshots if recommendation explainability/history needs to be versioned over time.
 
 ## Database Schema
 
@@ -393,7 +396,8 @@ Detailed design notes: `docs/architecture-and-recommendation.md`
 
 ## API Documentation PDF
 
-- Exported API documentation: `docs/api-documentation.pdf`
+- Exported API documentation artifact: `docs/api-documentation.pdf`
+- PDF generator script: `backend/scripts/export_api_pdf.py`
 - Interactive docs at runtime: `/docs`
 
 ## Deployment Runbook
