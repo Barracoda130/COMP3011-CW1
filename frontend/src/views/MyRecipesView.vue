@@ -32,8 +32,10 @@ function syncUpdatedRecipeIdFromRoute() {
   updatedRecipeId.value = raw && /^\d+$/.test(raw) ? Number(raw) : null;
 }
 
-async function loadMyRecipes() {
-  isLoading.value = true;
+async function loadMyRecipes({ background = false } = {}) {
+  if (!background) {
+    isLoading.value = true;
+  }
   error.value = "";
   try {
     items.value = await api.listMyRecipes({ query: searchQuery.value });
@@ -41,7 +43,9 @@ async function loadMyRecipes() {
   } catch (err) {
     error.value = err.message;
   } finally {
-    isLoading.value = false;
+    if (!background) {
+      isLoading.value = false;
+    }
   }
 }
 
@@ -117,6 +121,8 @@ onMounted(async () => {
 
   await nextTick();
   restoreScrollPosition();
+  // Keep cached UI snappy but immediately refresh from server to avoid stale results.
+  void loadMyRecipes({ background: true });
 });
 
 watch(() => route.query.updated, syncUpdatedRecipeIdFromRoute);

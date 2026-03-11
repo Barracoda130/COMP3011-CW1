@@ -15,8 +15,8 @@ let redirectTimer = null;
 const form = ref({
   title: "",
   cuisine: "",
-  prep_minutes: 20,
-  calories: 500,
+  prep_minutes: "",
+  calories: "",
   intro: "",
   image_url: "",
   ingredients: "",
@@ -57,11 +57,17 @@ async function createRecipe() {
   successMessage.value = "";
 
   try {
+    const prepMinutesRaw = String(form.value.prep_minutes ?? "").trim();
+    if (!prepMinutesRaw) {
+      error.value = "Prep Minutes is required.";
+      return;
+    }
+
     const payload = {
       title: form.value.title,
       cuisine: form.value.cuisine.trim() || null,
-      prep_minutes: Number(form.value.prep_minutes),
-      calories: form.value.calories ? Number(form.value.calories) : null,
+      prep_minutes: Number(prepMinutesRaw),
+      calories: String(form.value.calories ?? "").trim() ? Number(form.value.calories) : null,
       intro: form.value.intro || null,
       image_url: form.value.image_url || null,
       ingredients: form.value.ingredients
@@ -75,14 +81,17 @@ async function createRecipe() {
       steps: form.value.steps || null
     };
     created.value = await api.createRecipe(payload);
-    successMessage.value = "Recipe created successfully. Redirecting to Discover...";
+    successMessage.value = "Recipe created successfully. Redirecting to My Recipes...";
 
     if (redirectTimer) {
       clearTimeout(redirectTimer);
     }
 
     redirectTimer = setTimeout(() => {
-      router.push("/recipes");
+      router.push({
+        path: "/recipes/mine",
+        query: { updated: String(created.value.id || "") }
+      });
     }, 1200);
   } catch (err) {
     error.value = err.message;
@@ -104,8 +113,8 @@ async function importFromUrl() {
     const preview = await api.importRecipeFromUrl(normalizedUrl);
     form.value.title = preview.title || form.value.title;
     form.value.cuisine = preview.cuisine || "";
-    form.value.prep_minutes = preview.prep_minutes || form.value.prep_minutes || 20;
-    form.value.calories = preview.calories ?? form.value.calories;
+    form.value.prep_minutes = preview.prep_minutes ?? "";
+    form.value.calories = preview.calories ?? "";
     form.value.intro = preview.intro || form.value.intro;
     form.value.image_url = preview.image_url || form.value.image_url;
     form.value.ingredients = Array.isArray(preview.ingredients)
