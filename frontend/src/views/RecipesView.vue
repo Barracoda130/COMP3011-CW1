@@ -8,7 +8,7 @@ import { isAuthenticated } from "../stores/auth";
 import { formatPrepTime } from "../utils/time";
 import { loadSessionPageCache, saveSessionPageCache } from "../utils/pageCache";
 
-const RECIPES_STATE_KEY = "recipes-page-state";
+const RECIPES_STATE_KEY = "recipes-page-state-v2";
 
 const recipes = ref([]);
 const localCount = ref(0);
@@ -133,12 +133,15 @@ onMounted(async () => {
   restorePageState();
   window.addEventListener("scroll", handleScrollSave, { passive: true });
 
-  if (!restoredFromCache.value) {
+  if (restoredFromCache.value) {
+    await nextTick();
+    restoreScrollPosition();
+    // Revalidate cached discover results so counts are always fresh.
     await loadRecipes();
+    return;
   }
 
-  await nextTick();
-  restoreScrollPosition();
+  await loadRecipes();
 });
 
 onUnmounted(() => {
