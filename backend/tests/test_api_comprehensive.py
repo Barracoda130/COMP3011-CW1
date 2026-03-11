@@ -391,6 +391,33 @@ def test_recipe_import_url_success_and_parse_failure(monkeypatch) -> None:
         assert failure.status_code == 400
         assert failure.json()["detail"] == "Could not parse recipe data from this URL"
 
+
+def test_recipe_import_url_unsupported_source_error(monkeypatch) -> None:
+    email = f"test-{uuid4().hex[:8]}@example.com"
+
+    with TestClient(app) as client:
+        headers = _register_and_login(client, email)
+
+        def _fake_extract_failure(_url: str) -> dict[str, object]:
+            raise recipes_endpoints.RecipeImportError("URL does not appear to be an HTML recipe page")
+
+        monkeypatch.setattr(recipes_endpoints, "extract_recipe_from_url", _fake_extract_failure)
+
+        response = client.post(
+            "/api/v1/recipes/import-url",
+            json={"url": "https://example.com/file.pdf"},
+            headers=headers,
+        )
+        assert response.status_code == 400
+        assert response.json()["detail"] == "URL does not appear to be an HTML recipe page"
+
+        invalid_scheme_response = client.post(
+            "/api/v1/recipes/import-url",
+            json={"url": "ftp://example.com/recipe"},
+            headers=headers,
+        )
+        assert invalid_scheme_response.status_code == 422
+
 def test_discover_suggested_and_rated_query_validation(monkeypatch) -> None:
     email = f"test-{uuid4().hex[:8]}@example.com"
 

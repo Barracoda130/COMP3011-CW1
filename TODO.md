@@ -38,24 +38,24 @@
 
 ## Phase 5: Import Pipeline Enhancement
 
-- [ ] Keep webpage import parser aligned with current `intro/ingredients/steps` separation.
-- [ ] Add video import MVP (captions-first).
-- [ ] Add fallback flow for manual transcript paste when extraction is unavailable.
-- [ ] Parse transcript into `intro`, `ingredients`, `steps` using marker rules.
+- [x] Keep webpage import parser aligned with current `intro/ingredients/steps` separation.
+- [x] Add video import MVP (captions-first).
+- [x] Add fallback flow for manual transcript paste when extraction is unavailable.
+- [x] Parse transcript into `intro`, `ingredients`, `steps` using marker rules.
 
 ## Phase 6: Frontend Demo-Readiness
 
-- [ ] Add weekly plan page/UI.
-- [ ] Show recommendation explanations in suggested cards.
-- [ ] Verify cook/suggested/create/edit UX remains consistent with latest model fields.
+- [x] Add weekly plan page/UI.
+- [x] Show recommendation explanations in suggested cards.
+- [x] Verify cook/suggested/create/edit UX remains consistent with latest model fields.
 
 ## Phase 7: Test and Reliability Pass
 
-- [ ] Add parser tests for intro/steps split edge cases.
-- [ ] Add tests for weekly-plan constraints and generation behavior.
-- [ ] Add tests for recommendation explanation outputs.
-- [ ] Add tests for import error paths and unsupported sources.
-- [ ] Run full backend and frontend test suites and fix regressions.
+- [x] Add parser tests for intro/steps split edge cases.
+- [x] Add tests for weekly-plan constraints and generation behavior.
+- [x] Add tests for recommendation explanation outputs.
+- [x] Add tests for import error paths and unsupported sources.
+- [x] Run full backend and frontend test suites and fix regressions.
 
 ## Phase 8: Documentation and Delivery Artifacts
 
