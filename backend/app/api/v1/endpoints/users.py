@@ -5,7 +5,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -15,7 +15,19 @@ from app.models.rating import RecipeRating
 from app.models.recipe import Recipe
 from app.models.user import User
 from app.models.weekly_plan import WeeklyPlan, WeeklyPlanItem
+from app.schemas.analytics import (
+    AnalyticsRange,
+    AnalyticsSummaryRead,
+    PreferenceListRead,
+    RecommendationExplanationSummaryRead,
+    TasteProfileRead,
+    TasteProfileSummaryRead,
+    WeeklyPlanAnalyticsRead,
+    WeeklyNutritionSummaryRead,
+    WeeklyPlanDiversityRead,
+)
 from app.schemas.weekly_plan import WeeklyPlanRead, WeeklyPlanSelectionUpdate
+from app.services import analytics as analytics_service
 from app.services.themealdb import get_themealdb_recipe_by_id, search_themealdb_recipes
 
 router = APIRouter()
@@ -504,3 +516,94 @@ def select_weekly_plan_option(
     db.commit()
     db.refresh(plan)
     return plan
+
+
+@router.get("/me/analytics/summary", response_model=AnalyticsSummaryRead)
+def get_analytics_summary(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AnalyticsSummaryRead:
+    return analytics_service.build_analytics_summary(db, current_user)
+
+
+@router.get("/me/analytics/taste-profile-summary", response_model=TasteProfileSummaryRead)
+def get_taste_profile_summary(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> TasteProfileSummaryRead:
+    return analytics_service.get_taste_profile_summary(db, current_user)
+
+
+@router.get("/me/analytics/favourite-cuisines", response_model=PreferenceListRead)
+def get_favourite_cuisines(
+    limit: int = Query(default=5, ge=1, le=20),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PreferenceListRead:
+    return analytics_service.get_favourite_cuisines(db, current_user, limit=limit)
+
+
+@router.get("/me/analytics/favourite-ingredients", response_model=PreferenceListRead)
+def get_favourite_ingredients(
+    limit: int = Query(default=8, ge=1, le=30),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PreferenceListRead:
+    return analytics_service.get_favourite_ingredients(db, current_user, limit=limit)
+
+
+@router.get("/me/analytics/preferred-prep-time-range", response_model=AnalyticsRange)
+def get_preferred_prep_time_range(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AnalyticsRange:
+    return analytics_service.get_preferred_prep_time_range(db, current_user)
+
+
+@router.get("/me/analytics/preferred-calorie-range", response_model=AnalyticsRange)
+def get_preferred_calorie_range(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AnalyticsRange:
+    return analytics_service.get_preferred_calorie_range(db, current_user)
+
+
+@router.get("/me/analytics/weekly-plan-diversity", response_model=WeeklyPlanDiversityRead)
+def get_weekly_plan_diversity(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> WeeklyPlanDiversityRead:
+    return analytics_service.get_weekly_plan_diversity_score(db, current_user)
+
+
+@router.get("/me/analytics/weekly-nutrition-summary", response_model=WeeklyNutritionSummaryRead)
+def get_weekly_nutrition_summary(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> WeeklyNutritionSummaryRead:
+    return analytics_service.get_weekly_nutrition_summary(db, current_user)
+
+
+@router.get("/me/analytics/recommendation-explanation-summary", response_model=RecommendationExplanationSummaryRead)
+def get_recommendation_explanation_summary(
+    limit: int = Query(default=5, ge=1, le=20),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> RecommendationExplanationSummaryRead:
+    return analytics_service.get_recommendation_explanation_summary(db, current_user, limit=limit)
+
+
+@router.get("/me/taste-profile", response_model=TasteProfileRead)
+def get_taste_profile(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> TasteProfileRead:
+    return analytics_service.get_taste_profile(db, current_user)
+
+
+@router.get("/me/analytics/weekly-plan", response_model=WeeklyPlanAnalyticsRead)
+def get_weekly_plan_analytics(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> WeeklyPlanAnalyticsRead:
+    return analytics_service.get_weekly_plan_analytics(db, current_user)

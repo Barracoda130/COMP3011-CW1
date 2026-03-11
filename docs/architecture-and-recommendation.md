@@ -8,6 +8,7 @@ This document describes the implemented architecture and runtime behavior of the
 - Backend: FastAPI (`backend/app`) with modular routers under `/api/v1`.
 - Persistence: SQLite with SQLAlchemy ORM models and Alembic migrations.
 - External Source: TheMealDB integration for Discover, Cook details, ratings, and Weekly Plan candidate generation.
+- Analytics: user-facing analytics under `/api/v1/users/me/analytics/*` derived from ratings, recipes, weekly plans, and cached recommendation reasons.
 
 ## Request/Response Flow
 
@@ -46,3 +47,20 @@ This document describes the implemented architecture and runtime behavior of the
 - Static API PDF: `docs/api-documentation.pdf`
 - Deployment runbook: `docs/deployment-runbook.md`
 - Repository overview and endpoint examples: `README.md`
+
+## Analytics Endpoints
+
+- `GET /api/v1/users/me/analytics/summary`
+- `GET /api/v1/users/me/analytics/taste-profile-summary`
+- `GET /api/v1/users/me/analytics/favourite-cuisines`
+- `GET /api/v1/users/me/analytics/favourite-ingredients`
+- `GET /api/v1/users/me/analytics/preferred-prep-time-range`
+- `GET /api/v1/users/me/analytics/preferred-calorie-range`
+- `GET /api/v1/users/me/analytics/weekly-plan-diversity`
+- `GET /api/v1/users/me/analytics/weekly-nutrition-summary`
+- `GET /api/v1/users/me/analytics/weekly-plan`
+- `GET /api/v1/users/me/analytics/recommendation-explanation-summary`
+
+Dedicated inferred taste profile endpoint:
+
+- `GET /api/v1/users/me/taste-profile`

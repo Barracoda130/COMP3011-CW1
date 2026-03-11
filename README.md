@@ -34,6 +34,8 @@ The project provides:
 - Cooking workflow page with checklist-style ingredients and rating UI
 - Personal recommendation flow with cached suggestion results and explanation reasons
 - Weekly Plan with one local and one TheMealDB option per day, including persisted user selection
+- User-facing analytics endpoints for taste profile, preferences, weekly-plan diversity/nutrition, and recommendation explanation summaries
+- Inferred taste-profile endpoint with favourite cuisines/tags/ingredients, disliked ingredients, and prep/calorie preference bands
 - Rated recipes and My Recipes management pages
 
 ## Tech Stack
@@ -307,6 +309,23 @@ Users / Weekly plan:
 - `POST /users/me/weekly-plan/generate`
 - `GET /users/me/weekly-plan/current`
 - `POST /users/me/weekly-plan/current/select`
+
+Users / Analytics:
+
+- `GET /users/me/analytics/summary`
+- `GET /users/me/analytics/taste-profile-summary`
+- `GET /users/me/analytics/favourite-cuisines`
+- `GET /users/me/analytics/favourite-ingredients`
+- `GET /users/me/analytics/preferred-prep-time-range`
+- `GET /users/me/analytics/preferred-calorie-range`
+- `GET /users/me/analytics/weekly-plan-diversity`
+- `GET /users/me/analytics/weekly-nutrition-summary`
+- `GET /users/me/analytics/weekly-plan`
+- `GET /users/me/analytics/recommendation-explanation-summary`
+
+Users / Taste Profile:
+
+- `GET /users/me/taste-profile`
 
 Example response: `GET /recipes/discover`
 

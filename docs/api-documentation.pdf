@@ -12,7 +12,7 @@ endobj
 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
 endobj
 5 0 obj
-<< /Length 1051 >>
+<< /Length 1692 >>
 stream
 BT
 /F1 10 Tf
@@ -49,6 +49,21 @@ T* (POST /users/me/weekly-plan/generate) Tj
 T* (GET /users/me/weekly-plan/current) Tj
 T* (POST /users/me/weekly-plan/current/select) Tj
 T* () Tj
+T* (Users Analytics) Tj
+T* (GET /users/me/analytics/summary) Tj
+T* (GET /users/me/analytics/taste-profile-summary) Tj
+T* (GET /users/me/analytics/favourite-cuisines) Tj
+T* (GET /users/me/analytics/favourite-ingredients) Tj
+T* (GET /users/me/analytics/preferred-prep-time-range) Tj
+T* (GET /users/me/analytics/preferred-calorie-range) Tj
+T* (GET /users/me/analytics/weekly-plan-diversity) Tj
+T* (GET /users/me/analytics/weekly-nutrition-summary) Tj
+T* (GET /users/me/analytics/weekly-plan) Tj
+T* (GET /users/me/analytics/recommendation-explanation-summary) Tj
+T* () Tj
+T* (Users Taste Profile) Tj
+T* (GET /users/me/taste-profile) Tj
+T* () Tj
 T* (For full interactive schema, run backend and open /docs.) Tj
 ET
 endstream
@@ -64,5 +79,5 @@ xref
 trailer
 << /Size 6 /Root 1 0 R >>
 startxref
-1414
+2055
 %%EOF

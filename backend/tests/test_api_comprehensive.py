@@ -74,6 +74,17 @@ def test_unauthorized_access_to_protected_endpoints() -> None:
             "/api/v1/users/me/weekly-plan/current/select",
             {"day_index": 0, "recipe_source": "local"},
         ),
+        ("get", "/api/v1/users/me/analytics/summary", None),
+        ("get", "/api/v1/users/me/analytics/taste-profile-summary", None),
+        ("get", "/api/v1/users/me/analytics/favourite-cuisines", None),
+        ("get", "/api/v1/users/me/analytics/favourite-ingredients", None),
+        ("get", "/api/v1/users/me/analytics/preferred-prep-time-range", None),
+        ("get", "/api/v1/users/me/analytics/preferred-calorie-range", None),
+        ("get", "/api/v1/users/me/analytics/weekly-plan-diversity", None),
+        ("get", "/api/v1/users/me/analytics/weekly-nutrition-summary", None),
+        ("get", "/api/v1/users/me/analytics/weekly-plan", None),
+        ("get", "/api/v1/users/me/analytics/recommendation-explanation-summary", None),
+        ("get", "/api/v1/users/me/taste-profile", None),
     ]
 
     with TestClient(app) as client:
@@ -768,3 +779,441 @@ def test_weekly_plan_can_include_themealdb_and_local(monkeypatch) -> None:
 
         external_ids = [item["external_recipe_id"] for item in items if item["recipe_source"] == "themealdb"]
         assert all(external_id for external_id in external_ids)
+
+
+def test_analytics_defaults_for_limited_history_user() -> None:
+    email = f"analytics-empty-{uuid4().hex[:8]}@example.com"
+
+    with TestClient(app) as client:
+        headers = _register_and_login(client, email)
+
+        summary_response = client.get("/api/v1/users/me/analytics/summary", headers=headers)
+        assert summary_response.status_code == 200
+        summary = summary_response.json()
+
+        assert summary["taste_profile"]["total_ratings"] == 0
+        assert summary["favourite_cuisines"]["items"] == []
+        assert summary["favourite_ingredients"]["items"] == []
+        assert summary["preferred_prep_time_range"]["label"] == "insufficient-data"
+        assert summary["preferred_calorie_range"]["label"] == "insufficient-data"
+        assert summary["weekly_plan_diversity"]["diversity_score"] == 0.0
+        assert summary["weekly_nutrition_summary"]["total_items"] == 0
+        assert summary["recommendation_explanation_summary"]["total_recommendations"] == 0
+
+        invalid_limit = client.get("/api/v1/users/me/analytics/favourite-cuisines?limit=0", headers=headers)
+        assert invalid_limit.status_code == 422
+
+
+def test_analytics_endpoints_with_existing_user_history(monkeypatch) -> None:
+    email = f"analytics-rich-{uuid4().hex[:8]}@example.com"
+
+    external_catalog = [
+        {
+            "id": "themealdb-9901",
+            "external_id": "9901",
+            "source": "themealdb",
+            "title": "External Citrus Chicken",
+            "cuisine": "French",
+            "image_url": None,
+            "prep_minutes": 35,
+            "calories": 610,
+            "description": "zesty",
+            "tags": ["chicken", "quick"],
+            "category": "Chicken",
+            "key_ingredients": ["chicken", "lemon"],
+            "average_rating": None,
+            "owner_id": None,
+        },
+        {
+            "id": "themealdb-9902",
+            "external_id": "9902",
+            "source": "themealdb",
+            "title": "External Herb Fish",
+            "cuisine": "Spanish",
+            "image_url": None,
+            "prep_minutes": 40,
+            "calories": 520,
+            "description": "fresh",
+            "tags": ["fish"],
+            "category": "Seafood",
+            "key_ingredients": ["fish", "herbs"],
+            "average_rating": None,
+            "owner_id": None,
+        },
+    ]
+
+    def _fake_external_recipe(external_id: str):
+        if external_id == "9901":
+            return {
+                "id": "themealdb-9901",
+                "source": "themealdb",
+                "title": "External Citrus Chicken",
+                "cuisine": "French",
+                "description": "zesty",
+                "instructions": "Cook",
+                "image_url": None,
+                "tags": ["chicken"],
+                "ingredients": [{"name": "chicken", "measure": "200g"}],
+                "prep_minutes": 35,
+                "calories": 610,
+            }
+        if external_id == "9902":
+            return {
+                "id": "themealdb-9902",
+                "source": "themealdb",
+                "title": "External Herb Fish",
+                "cuisine": "Spanish",
+                "description": "fresh",
+                "instructions": "Bake",
+                "image_url": None,
+                "tags": ["fish"],
+                "ingredients": [{"name": "fish", "measure": "180g"}],
+                "prep_minutes": 40,
+                "calories": 520,
+            }
+        return None
+
+    monkeypatch.setattr(users_endpoints, "search_themealdb_recipes", lambda query, limit=20: external_catalog)
+    monkeypatch.setattr(users_endpoints, "get_themealdb_recipe_by_id", _fake_external_recipe)
+    monkeypatch.setattr(recipes_endpoints, "search_themealdb_recipes", lambda query, limit=20: [])
+    monkeypatch.setattr(users_endpoints.analytics_service, "get_themealdb_recipe_by_id", _fake_external_recipe)
+
+    with TestClient(app) as client:
+        headers = _register_and_login(client, email)
+
+        liked = client.post(
+            "/api/v1/recipes",
+            json={
+                "title": "Bright Chicken Bowl",
+                "cuisine": "French",
+                "prep_minutes": 25,
+                "calories": 560,
+                "ingredients": ["chicken breast", "lemon"],
+                "tags": ["quick", "protein"],
+                "steps": "Cook",
+            },
+            headers=headers,
+        )
+        assert liked.status_code == 201
+
+        candidate = client.post(
+            "/api/v1/recipes",
+            json={
+                "title": "Herb Chicken Pasta",
+                "cuisine": "French",
+                "prep_minutes": 30,
+                "calories": 620,
+                "ingredients": ["chicken", "pasta"],
+                "tags": ["comfort"],
+                "steps": "Simmer",
+            },
+            headers=headers,
+        )
+        assert candidate.status_code == 201
+
+        dislike = client.post(
+            "/api/v1/recipes",
+            json={
+                "title": "Heavy Beef Bake",
+                "cuisine": "British",
+                "prep_minutes": 70,
+                "calories": 900,
+                "ingredients": ["beef", "cream"],
+                "tags": ["heavy"],
+                "steps": "Bake",
+            },
+            headers=headers,
+        )
+        assert dislike.status_code == 201
+
+        like_rating = client.post(
+            f"/api/v1/recipes/{liked.json()['id']}/ratings",
+            json={"score": 5, "comment": "Great"},
+            headers=headers,
+        )
+        assert like_rating.status_code == 200
+
+        dislike_rating = client.post(
+            f"/api/v1/recipes/{dislike.json()['id']}/ratings",
+            json={"score": 1, "comment": "Too heavy"},
+            headers=headers,
+        )
+        assert dislike_rating.status_code == 200
+
+        suggested = client.get("/api/v1/recipes/suggested?local_limit=20&external_limit=1", headers=headers)
+        assert suggested.status_code == 200
+
+        generated = client.post("/api/v1/users/me/weekly-plan/generate", headers=headers)
+        assert generated.status_code == 200
+
+        summary_response = client.get("/api/v1/users/me/analytics/summary", headers=headers)
+        assert summary_response.status_code == 200
+        summary = summary_response.json()
+
+        assert summary["taste_profile"]["total_ratings"] >= 2
+        assert summary["favourite_cuisines"]["items"]
+        assert summary["favourite_ingredients"]["items"]
+        assert summary["preferred_prep_time_range"]["label"] != "insufficient-data"
+        assert summary["preferred_calorie_range"]["label"] != "insufficient-data"
+        assert summary["weekly_plan_diversity"]["total_items"] > 0
+        assert summary["weekly_nutrition_summary"]["total_items"] > 0
+        assert summary["recommendation_explanation_summary"]["total_recommendations"] >= 0
+
+        reasons_response = client.get(
+            "/api/v1/users/me/analytics/recommendation-explanation-summary?limit=3",
+            headers=headers,
+        )
+        assert reasons_response.status_code == 200
+        assert len(reasons_response.json()["top_reasons"]) <= 3
+
+
+def test_taste_profile_empty_history() -> None:
+    email = f"taste-empty-{uuid4().hex[:8]}@example.com"
+
+    with TestClient(app) as client:
+        headers = _register_and_login(client, email)
+        response = client.get("/api/v1/users/me/taste-profile", headers=headers)
+        assert response.status_code == 200
+        payload = response.json()
+
+        assert payload["total_ratings"] == 0
+        assert payload["favourite_cuisines"] == []
+        assert payload["favourite_tags"] == []
+        assert payload["favourite_ingredients"] == []
+        assert payload["disliked_ingredients"] == []
+        assert payload["preferred_prep_time_band"] == "insufficient-data"
+        assert payload["preferred_calorie_band"] == "insufficient-data"
+
+
+def test_taste_profile_normal_history() -> None:
+    email = f"taste-rich-{uuid4().hex[:8]}@example.com"
+
+    with TestClient(app) as client:
+        headers = _register_and_login(client, email)
+
+        liked_one = client.post(
+            "/api/v1/recipes",
+            json={
+                "title": "Herb Chicken Bowl",
+                "cuisine": "French",
+                "prep_minutes": 24,
+                "calories": 560,
+                "ingredients": ["chicken breast", "lemon", "spinach"],
+                "tags": ["quick", "protein"],
+                "steps": "Cook",
+            },
+            headers=headers,
+        )
+        assert liked_one.status_code == 201
+
+        liked_two = client.post(
+            "/api/v1/recipes",
+            json={
+                "title": "Chicken Pasta",
+                "cuisine": "French",
+                "prep_minutes": 28,
+                "calories": 620,
+                "ingredients": ["chicken", "pasta", "garlic"],
+                "tags": ["comfort", "protein"],
+                "steps": "Boil",
+            },
+            headers=headers,
+        )
+        assert liked_two.status_code == 201
+
+        disliked = client.post(
+            "/api/v1/recipes",
+            json={
+                "title": "Heavy Beef Bake",
+                "cuisine": "British",
+                "prep_minutes": 80,
+                "calories": 920,
+                "ingredients": ["beef", "cream"],
+                "tags": ["heavy"],
+                "steps": "Bake",
+            },
+            headers=headers,
+        )
+        assert disliked.status_code == 201
+
+        assert (
+            client.post(
+                f"/api/v1/recipes/{liked_one.json()['id']}/ratings",
+                json={"score": 5, "comment": "Loved"},
+                headers=headers,
+            ).status_code
+            == 200
+        )
+        assert (
+            client.post(
+                f"/api/v1/recipes/{liked_two.json()['id']}/ratings",
+                json={"score": 4, "comment": "Nice"},
+                headers=headers,
+            ).status_code
+            == 200
+        )
+        assert (
+            client.post(
+                f"/api/v1/recipes/{disliked.json()['id']}/ratings",
+                json={"score": 1, "comment": "Too rich"},
+                headers=headers,
+            ).status_code
+            == 200
+        )
+
+        response = client.get("/api/v1/users/me/taste-profile", headers=headers)
+        assert response.status_code == 200
+        payload = response.json()
+
+        assert payload["total_ratings"] == 3
+        assert payload["favourite_cuisines"]
+        assert payload["favourite_cuisines"][0] == "French"
+        assert "protein" in payload["favourite_tags"]
+        assert "chicken" in payload["favourite_ingredients"]
+        assert "beef" in payload["disliked_ingredients"]
+        assert payload["preferred_prep_time_band"] in {"quick", "balanced", "slow"}
+        assert payload["preferred_calorie_band"] in {"light", "moderate", "hearty"}
+
+
+def test_weekly_plan_analytics_without_active_plan() -> None:
+    email = f"weekly-analytics-empty-{uuid4().hex[:8]}@example.com"
+
+    with TestClient(app) as client:
+        headers = _register_and_login(client, email)
+        response = client.get("/api/v1/users/me/analytics/weekly-plan", headers=headers)
+        assert response.status_code == 200
+        payload = response.json()
+
+        assert payload["status"] == "no-active-plan"
+        assert payload["total_items"] == 0
+        assert payload["cuisine_distribution"] == []
+        assert payload["repeated_ingredients"] == []
+        assert payload["quick_meal_weekday_compliance"]["compliance_rate"] == 0.0
+        assert payload["calorie_summary"]["total_calories"] == 0
+        assert payload["diversity"]["diversity_score"] == 0.0
+
+
+def test_weekly_plan_analytics_with_active_plan(monkeypatch) -> None:
+    email = f"weekly-analytics-rich-{uuid4().hex[:8]}@example.com"
+
+    external_catalog = [
+        {
+            "id": "themealdb-7701",
+            "external_id": "7701",
+            "source": "themealdb",
+            "title": "External Chicken Tray",
+            "cuisine": "French",
+            "image_url": None,
+            "prep_minutes": 30,
+            "calories": 580,
+            "description": "zesty",
+            "tags": ["chicken"],
+            "category": "Chicken",
+            "key_ingredients": ["chicken", "lemon"],
+            "average_rating": None,
+            "owner_id": None,
+        },
+        {
+            "id": "themealdb-7702",
+            "external_id": "7702",
+            "source": "themealdb",
+            "title": "External Veg Pasta",
+            "cuisine": "Italian",
+            "image_url": None,
+            "prep_minutes": 22,
+            "calories": 510,
+            "description": "comfort",
+            "tags": ["vegetarian"],
+            "category": "Pasta",
+            "key_ingredients": ["pasta", "tomato"],
+            "average_rating": None,
+            "owner_id": None,
+        },
+    ]
+
+    def _fake_external_recipe(external_id: str):
+        if external_id == "7701":
+            return {
+                "id": "themealdb-7701",
+                "source": "themealdb",
+                "title": "External Chicken Tray",
+                "cuisine": "French",
+                "description": "zesty",
+                "instructions": "Bake",
+                "image_url": None,
+                "tags": ["chicken"],
+                "ingredients": [{"name": "chicken", "measure": "200g"}],
+                "prep_minutes": 30,
+                "calories": 580,
+            }
+        if external_id == "7702":
+            return {
+                "id": "themealdb-7702",
+                "source": "themealdb",
+                "title": "External Veg Pasta",
+                "cuisine": "Italian",
+                "description": "comfort",
+                "instructions": "Boil",
+                "image_url": None,
+                "tags": ["vegetarian"],
+                "ingredients": [{"name": "pasta", "measure": "180g"}],
+                "prep_minutes": 22,
+                "calories": 510,
+            }
+        return None
+
+    monkeypatch.setattr(users_endpoints, "search_themealdb_recipes", lambda query, limit=20: external_catalog)
+    monkeypatch.setattr(users_endpoints, "get_themealdb_recipe_by_id", _fake_external_recipe)
+    monkeypatch.setattr(users_endpoints.analytics_service, "get_themealdb_recipe_by_id", _fake_external_recipe)
+
+    with TestClient(app) as client:
+        headers = _register_and_login(client, email)
+
+        local_payloads = [
+            {
+                "title": "Quick Chicken Bowl",
+                "cuisine": "French",
+                "prep_minutes": 20,
+                "calories": 560,
+                "ingredients": ["chicken", "rice"],
+                "tags": ["quick"],
+                "steps": "Cook",
+            },
+            {
+                "title": "Quick Pasta",
+                "cuisine": "Italian",
+                "prep_minutes": 18,
+                "calories": 520,
+                "ingredients": ["pasta", "tomato"],
+                "tags": ["quick"],
+                "steps": "Boil",
+            },
+            {
+                "title": "Slow Beef Roast",
+                "cuisine": "British",
+                "prep_minutes": 70,
+                "calories": 830,
+                "ingredients": ["beef", "potato"],
+                "tags": ["hearty"],
+                "steps": "Roast",
+            },
+        ]
+
+        for payload in local_payloads:
+            created = client.post("/api/v1/recipes", json=payload, headers=headers)
+            assert created.status_code == 201
+
+        generated = client.post("/api/v1/users/me/weekly-plan/generate", headers=headers)
+        assert generated.status_code == 200
+
+        response = client.get("/api/v1/users/me/analytics/weekly-plan", headers=headers)
+        assert response.status_code == 200
+        payload = response.json()
+
+        assert payload["status"] == "active"
+        assert payload["total_items"] > 0
+        assert payload["cuisine_distribution"]
+        assert payload["quick_meal_weekday_compliance"]["weekday_items"] >= 0
+        assert 0.0 <= payload["quick_meal_weekday_compliance"]["compliance_rate"] <= 1.0
+        assert payload["calorie_summary"]["total_calories"] >= 0
+        assert payload["diversity"]["diversity_score"] >= 0.0

@@ -69,6 +69,10 @@ npm.cmd run dev
 - Weekly Plan generation endpoint works: `POST /api/v1/users/me/weekly-plan/generate`.
 - Weekly Plan retrieval endpoint works: `GET /api/v1/users/me/weekly-plan/current`.
 - Weekly Plan selection endpoint works: `POST /api/v1/users/me/weekly-plan/current/select`.
+- Analytics summary endpoint works: `GET /api/v1/users/me/analytics/summary`.
+- Weekly-plan analytics endpoint works: `GET /api/v1/users/me/analytics/weekly-plan`.
+- Analytics recommendation explanation endpoint works: `GET /api/v1/users/me/analytics/recommendation-explanation-summary`.
+- Taste profile endpoint works: `GET /api/v1/users/me/taste-profile`.
 
 ## 7. Rollback Notes
 
