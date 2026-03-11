@@ -11,8 +11,11 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.external_rating import ExternalRecipeRating
+from app.models.ingredient import Ingredient, RecipeIngredient
 from app.models.rating import RecipeRating
 from app.models.recipe import Recipe
+from app.models.recipe_feedback import RecipeFeedback
+from app.models.tag import RecipeTag, Tag
 from app.models.user import User
 from app.models.weekly_plan import WeeklyPlan, WeeklyPlanItem
 from app.schemas.weekly_plan import WeeklyPlanRead, WeeklyPlanSelectionUpdate
@@ -82,7 +85,40 @@ def _main_ingredient(ingredients: list[str]) -> str:
     return meaningful[0] if meaningful else "unknown"
 
 
+def _load_normalized_recipe_entities(db: Session, recipe_ids: list[int]) -> tuple[dict[int, list[str]], dict[int, list[str]]]:
+    if not recipe_ids:
+        return {}, {}
+
+    tag_rows = (
+        db.query(RecipeTag.recipe_id, Tag.display_name)
+        .join(Tag, Tag.id == RecipeTag.tag_id)
+        .filter(RecipeTag.recipe_id.in_(recipe_ids))
+        .all()
+    )
+    ingredient_rows = (
+        db.query(RecipeIngredient.recipe_id, Ingredient.display_name)
+        .join(Ingredient, Ingredient.id == RecipeIngredient.ingredient_id)
+        .filter(RecipeIngredient.recipe_id.in_(recipe_ids))
+        .order_by(RecipeIngredient.recipe_id.asc(), RecipeIngredient.position.asc(), RecipeIngredient.id.asc())
+        .all()
+    )
+
+    tags_by_recipe: dict[int, list[str]] = defaultdict(list)
+    ingredients_by_recipe: dict[int, list[str]] = defaultdict(list)
+
+    for recipe_id, tag_name in tag_rows:
+        if tag_name:
+            tags_by_recipe[int(recipe_id)].append(str(tag_name))
+
+    for recipe_id, ingredient_name in ingredient_rows:
+        if ingredient_name:
+            ingredients_by_recipe[int(recipe_id)].append(str(ingredient_name))
+
+    return dict(tags_by_recipe), dict(ingredients_by_recipe)
+
+
 def _build_candidates_for_user(db: Session, current_user: User) -> list[PlanCandidate]:
+    feedback = db.query(RecipeFeedback).filter(RecipeFeedback.user_id == current_user.id).all()
     ratings = db.query(RecipeRating).filter(RecipeRating.user_id == current_user.id).all()
     external_ratings = (
         db.query(ExternalRecipeRating)
@@ -93,8 +129,10 @@ def _build_candidates_for_user(db: Session, current_user: User) -> list[PlanCand
         .all()
     )
 
-    liked_recipe_ids = [rating.recipe_id for rating in ratings if rating.score >= 4]
-    disliked_recipe_ids = [rating.recipe_id for rating in ratings if rating.score <= 2]
+    rating_source = feedback if feedback else ratings
+
+    liked_recipe_ids = [rating.recipe_id for rating in rating_source if rating.score >= 4]
+    disliked_recipe_ids = [rating.recipe_id for rating in rating_source if rating.score <= 2]
 
     liked_cuisines: Counter[str] = Counter()
     liked_tags: Counter[str] = Counter()
@@ -104,19 +142,20 @@ def _build_candidates_for_user(db: Session, current_user: User) -> list[PlanCand
     liked_external_ids: set[str] = set()
     disliked_external_ids: set[str] = set()
 
-    if ratings:
-        recipe_ids = [rating.recipe_id for rating in ratings]
+    if rating_source:
+        recipe_ids = [rating.recipe_id for rating in rating_source]
         rated_recipes = db.query(Recipe).filter(Recipe.id.in_(recipe_ids)).all()
         rated_map = {recipe.id: recipe for recipe in rated_recipes}
+        normalized_tags_by_recipe, normalized_ingredients_by_recipe = _load_normalized_recipe_entities(db, recipe_ids)
 
-        for rating in ratings:
+        for rating in rating_source:
             recipe = rated_map.get(rating.recipe_id)
             if recipe is None:
                 continue
 
             cuisine = (recipe.cuisine or "Unknown").strip()
-            tags = recipe.tags or []
-            ingredients = recipe.ingredients or []
+            tags = normalized_tags_by_recipe.get(recipe.id) or (recipe.tags or [])
+            ingredients = normalized_ingredients_by_recipe.get(recipe.id) or (recipe.ingredients or [])
             main_ing = _main_ingredient(ingredients)
 
             if rating.score >= 4:
@@ -163,14 +202,16 @@ def _build_candidates_for_user(db: Session, current_user: User) -> list[PlanCand
             disliked_ingredients[main_ing] += 1
 
     all_recipes = db.query(Recipe).all()
+    all_recipe_ids = [recipe.id for recipe in all_recipes]
+    all_tags_by_recipe, all_ingredients_by_recipe = _load_normalized_recipe_entities(db, all_recipe_ids)
     candidates: list[PlanCandidate] = []
     for recipe in all_recipes:
         if recipe.id in disliked_recipe_ids:
             continue
 
         cuisine = (recipe.cuisine or "Unknown").strip()
-        tags = recipe.tags or []
-        ingredients = recipe.ingredients or []
+        tags = all_tags_by_recipe.get(recipe.id) or (recipe.tags or [])
+        ingredients = all_ingredients_by_recipe.get(recipe.id) or (recipe.ingredients or [])
         main_ing = _main_ingredient(ingredients)
 
         score = 0.0

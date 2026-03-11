@@ -11,9 +11,12 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.external_rating import ExternalRecipeRating
+from app.models.ingredient import Ingredient, RecipeIngredient
 from app.models.rating import RecipeRating
 from app.models.recipe import Recipe
+from app.models.recipe_feedback import RecipeFeedback
 from app.models.suggestion_cache import UserSuggestionCache
+from app.models.tag import RecipeTag, Tag
 from app.models.user import User
 from app.schemas.recipe import (
     RecipeCookIngredient,
@@ -52,13 +55,53 @@ def _tokenize_feature(value: str) -> list[str]:
 
 
 def _local_recipe_feature_set(recipe: Recipe) -> set[str]:
+    return _local_recipe_feature_set_from_values(
+        cuisine=recipe.cuisine,
+        tags=recipe.tags or [],
+        ingredients=recipe.ingredients or [],
+    )
+
+
+def _local_recipe_feature_set_from_values(cuisine: str | None, tags: list[str], ingredients: list[str]) -> set[str]:
     features: set[str] = set()
-    for tag in recipe.tags or []:
+    for tag in tags:
         features.update(_tokenize_feature(tag))
-    for ingredient in recipe.ingredients or []:
+    for ingredient in ingredients:
         features.update(_tokenize_feature(ingredient))
-    features.update(_tokenize_feature(recipe.cuisine or ""))
+    features.update(_tokenize_feature(cuisine or ""))
     return features
+
+
+def _load_normalized_recipe_entities(db: Session, recipe_ids: list[int]) -> tuple[dict[int, list[str]], dict[int, list[str]]]:
+    if not recipe_ids:
+        return {}, {}
+
+    tag_rows = (
+        db.query(RecipeTag.recipe_id, Tag.display_name)
+        .join(Tag, Tag.id == RecipeTag.tag_id)
+        .filter(RecipeTag.recipe_id.in_(recipe_ids))
+        .all()
+    )
+    ingredient_rows = (
+        db.query(RecipeIngredient.recipe_id, Ingredient.display_name)
+        .join(Ingredient, Ingredient.id == RecipeIngredient.ingredient_id)
+        .filter(RecipeIngredient.recipe_id.in_(recipe_ids))
+        .order_by(RecipeIngredient.recipe_id.asc(), RecipeIngredient.position.asc(), RecipeIngredient.id.asc())
+        .all()
+    )
+
+    tags_by_recipe: dict[int, list[str]] = defaultdict(list)
+    ingredients_by_recipe: dict[int, list[str]] = defaultdict(list)
+
+    for recipe_id, tag_name in tag_rows:
+        if tag_name:
+            tags_by_recipe[int(recipe_id)].append(str(tag_name))
+
+    for recipe_id, ingredient_name in ingredient_rows:
+        if ingredient_name:
+            ingredients_by_recipe[int(recipe_id)].append(str(ingredient_name))
+
+    return dict(tags_by_recipe), dict(ingredients_by_recipe)
 
 
 def _ingredient_tokens(ingredients: list[str]) -> set[str]:
@@ -433,6 +476,7 @@ def suggested_recipes_for_user(
             formula=formula,
         )
 
+    local_feedback = db.query(RecipeFeedback).filter(RecipeFeedback.user_id == current_user.id).all()
     local_ratings = db.query(RecipeRating).filter(RecipeRating.user_id == current_user.id).all()
     external_ratings = (
         db.query(ExternalRecipeRating)
@@ -443,7 +487,9 @@ def suggested_recipes_for_user(
         .all()
     )
 
-    if not local_ratings and not external_ratings:
+    rating_source = local_feedback if local_feedback else local_ratings
+
+    if not rating_source and not external_ratings:
         return RecipeSuggestionResponse(items=[], local_count=0, external_count=0, formula=formula)
 
     liked_features: set[str] = set()
@@ -460,20 +506,23 @@ def suggested_recipes_for_user(
     rated_local_ids: set[int] = set()
     rated_external_ids: set[str] = set()
 
-    local_recipe_ids = [rating.recipe_id for rating in local_ratings]
+    local_recipe_ids = [rating.recipe_id for rating in rating_source]
     local_recipe_map: dict[int, Recipe] = {}
     if local_recipe_ids:
         local_recipe_rows = db.query(Recipe).filter(Recipe.id.in_(local_recipe_ids)).all()
         local_recipe_map = {recipe.id: recipe for recipe in local_recipe_rows}
+    normalized_tags_by_recipe, normalized_ingredients_by_recipe = _load_normalized_recipe_entities(db, local_recipe_ids)
 
-    for rating in local_ratings:
+    for rating in rating_source:
         rated_local_ids.add(rating.recipe_id)
         recipe = local_recipe_map.get(rating.recipe_id)
         if recipe is None:
             continue
 
-        features = _local_recipe_feature_set(recipe)
-        ingredient_profile = _ingredient_profile(recipe.ingredients or [])
+        tags = normalized_tags_by_recipe.get(recipe.id) or (recipe.tags or [])
+        ingredients = normalized_ingredients_by_recipe.get(recipe.id) or (recipe.ingredients or [])
+        features = _local_recipe_feature_set_from_values(recipe.cuisine, tags, ingredients)
+        ingredient_profile = _ingredient_profile(ingredients)
         prep_band = _prep_band(recipe.prep_minutes)
         calorie_band = _calorie_band(recipe.calories)
         if not features:
@@ -556,6 +605,8 @@ def suggested_recipes_for_user(
     candidate_items: list[RecipeDiscoverItem] = []
 
     local_candidates = db.query(Recipe).limit(400).all()
+    local_candidate_ids = [recipe.id for recipe in local_candidates]
+    candidate_tags_by_recipe, candidate_ingredients_by_recipe = _load_normalized_recipe_entities(db, local_candidate_ids)
     local_candidate_features: dict[int, set[str]] = {}
     local_candidate_ingredient_profiles: dict[int, dict[str, float]] = {}
     local_candidate_prep: dict[int, str | None] = {}
@@ -564,8 +615,14 @@ def suggested_recipes_for_user(
     for recipe in local_candidates:
         if recipe.id in rated_local_ids:
             continue
-        local_candidate_features[recipe.id] = _local_recipe_feature_set(recipe)
-        local_candidate_ingredient_profiles[recipe.id] = _ingredient_profile(recipe.ingredients or [])
+        recipe_tags = candidate_tags_by_recipe.get(recipe.id) or (recipe.tags or [])
+        recipe_ingredients = candidate_ingredients_by_recipe.get(recipe.id) or (recipe.ingredients or [])
+        local_candidate_features[recipe.id] = _local_recipe_feature_set_from_values(
+            recipe.cuisine,
+            recipe_tags,
+            recipe_ingredients,
+        )
+        local_candidate_ingredient_profiles[recipe.id] = _ingredient_profile(recipe_ingredients)
         rarity_profiles.append(local_candidate_ingredient_profiles[recipe.id])
         local_candidate_prep[recipe.id] = _prep_band(recipe.prep_minutes)
         local_candidate_calorie[recipe.id] = _calorie_band(recipe.calories)
@@ -578,7 +635,7 @@ def suggested_recipes_for_user(
                 image_url=None,
                 prep_minutes=recipe.prep_minutes,
                 calories=recipe.calories,
-                tags=recipe.tags,
+                tags=recipe_tags,
                 description=recipe.intro or recipe.steps,
                 average_rating=recipe.average_rating,
                 owner_id=recipe.owner_id,
