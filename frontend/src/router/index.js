@@ -15,7 +15,7 @@ import SuggestedRecipesView from "../views/SuggestedRecipesView.vue";
 import WeeklyPlanView from "../views/WeeklyPlanView.vue";
 
 const routes = [
-  { path: "/", redirect: "/health" },
+  { path: "/", redirect: "/recipes" },
   { path: "/health", name: "health", component: HealthView },
   { path: "/auth", name: "auth", component: AuthView },
   { path: "/auth/register", redirect: { path: "/auth", query: { mode: "register" } } },
