@@ -47,39 +47,110 @@ def _normalize_token(value: str) -> str:
     return re.sub(r"[^a-z]", "", value.lower()).strip()
 
 
-def _main_ingredient(ingredients: list[str]) -> str:
-    if not ingredients:
-        return "unknown"
+_INGREDIENT_STOPWORDS = {
+    "cup",
+    "cups",
+    "tbsp",
+    "tsp",
+    "teaspoon",
+    "teaspoons",
+    "tablespoon",
+    "tablespoons",
+    "gram",
+    "grams",
+    "kg",
+    "ml",
+    "l",
+    "oz",
+    "lb",
+    "small",
+    "medium",
+    "large",
+    "fresh",
+    "chopped",
+    "sliced",
+    "diced",
+    "of",
+    "g",
+    "mg",
+    "lbs",
+    "pound",
+    "pounds",
+    "ounce",
+    "ounces",
+    "liter",
+    "liters",
+    "litre",
+    "litres",
+    "clove",
+    "cloves",
+    "pinch",
+    "pinches",
+    "slice",
+    "slices",
+    "piece",
+    "pieces",
+    "can",
+    "cans",
+    "package",
+    "packages",
+}
 
-    line = ingredients[0].lower()
-    line = re.sub(r"^\s*\d+[\d\s\./-]*", "", line)
-    tokens = [_normalize_token(token) for token in re.split(r"\s+", line) if token.strip()]
-    stopwords = {
-        "cup",
-        "cups",
-        "tbsp",
-        "tsp",
-        "teaspoon",
-        "teaspoons",
-        "tablespoon",
-        "tablespoons",
-        "gram",
-        "grams",
-        "kg",
-        "ml",
-        "l",
-        "oz",
-        "lb",
-        "small",
-        "medium",
-        "large",
-        "fresh",
-        "chopped",
-        "sliced",
-        "diced",
-    }
-    meaningful = [token for token in tokens if token and token not in stopwords]
-    return meaningful[0] if meaningful else "unknown"
+
+def _is_measurement_token(token: str) -> bool:
+    if not token:
+        return True
+    if token.isdigit():
+        return True
+    if re.match(r"^\d+(?:\.\d+)?(?:g|kg|mg|ml|l|oz|lb|lbs)$", token):
+        return True
+    return token in _INGREDIENT_STOPWORDS
+
+
+def _parse_quantity_prefix(raw_value: str) -> float:
+    value = raw_value.strip().lower()
+    if not value:
+        return 1.0
+
+    mixed_match = re.match(r"^(\d+)\s+(\d+)/(\d+)", value)
+    if mixed_match:
+        whole = float(mixed_match.group(1))
+        numerator = float(mixed_match.group(2))
+        denominator = float(mixed_match.group(3))
+        if denominator > 0:
+            return min(whole + (numerator / denominator), 8.0)
+
+    fraction_match = re.match(r"^(\d+)/(\d+)", value)
+    if fraction_match:
+        numerator = float(fraction_match.group(1))
+        denominator = float(fraction_match.group(2))
+        if denominator > 0:
+            return min(numerator / denominator, 8.0)
+
+    decimal_match = re.match(r"^(\d+(?:\.\d+)?)", value)
+    if decimal_match:
+        return min(float(decimal_match.group(1)), 8.0)
+
+    return 1.0
+
+
+def _ingredient_profile(ingredients: list[str]) -> dict[str, float]:
+    profile: dict[str, float] = defaultdict(float)
+    for raw in ingredients:
+        quantity = _parse_quantity_prefix(raw)
+        for token in re.split(r"\s+", raw):
+            normalized = _normalize_token(token)
+            if _is_measurement_token(normalized):
+                continue
+            profile[normalized] += quantity
+    return dict(profile)
+
+
+def _main_ingredient(ingredients: list[str]) -> str:
+    profile = _ingredient_profile(ingredients)
+    if not profile:
+        return "unknown"
+    return max(profile.items(), key=lambda item: item[1])[0]
 
 
 def _build_candidates_for_user(db: Session, current_user: User) -> list[PlanCandidate]:
@@ -98,9 +169,11 @@ def _build_candidates_for_user(db: Session, current_user: User) -> list[PlanCand
 
     liked_cuisines: Counter[str] = Counter()
     liked_tags: Counter[str] = Counter()
-    liked_ingredients: Counter[str] = Counter()
+    liked_main_ingredients: Counter[str] = Counter()
+    disliked_main_ingredients: Counter[str] = Counter()
+    liked_ingredient_profile: defaultdict[str, float] = defaultdict(float)
+    disliked_ingredient_profile: defaultdict[str, float] = defaultdict(float)
     disliked_tags: Counter[str] = Counter()
-    disliked_ingredients: Counter[str] = Counter()
     liked_external_ids: set[str] = set()
     disliked_external_ids: set[str] = set()
 
@@ -118,16 +191,23 @@ def _build_candidates_for_user(db: Session, current_user: User) -> list[PlanCand
             tags = recipe.tags or []
             ingredients = recipe.ingredients or []
             main_ing = _main_ingredient(ingredients)
+            ingredient_profile = _ingredient_profile(ingredients)
 
             if rating.score >= 4:
                 liked_cuisines[cuisine] += 1
                 for tag in tags:
                     liked_tags[tag.lower()] += 1
-                liked_ingredients[main_ing] += 1
+                if main_ing != "unknown":
+                    liked_main_ingredients[main_ing] += 1
+                for token, quantity in ingredient_profile.items():
+                    liked_ingredient_profile[token] += quantity
             elif rating.score <= 2:
                 for tag in tags:
                     disliked_tags[tag.lower()] += 1
-                disliked_ingredients[main_ing] += 1
+                if main_ing != "unknown":
+                    disliked_main_ingredients[main_ing] += 1
+                for token, quantity in ingredient_profile.items():
+                    disliked_ingredient_profile[token] += quantity
 
     for rating in external_ratings:
         external_id = (rating.external_recipe_id or "").strip()
@@ -151,16 +231,23 @@ def _build_candidates_for_user(db: Session, current_user: User) -> list[PlanCand
             if str(ingredient.get("name") or "").strip()
         ]
         main_ing = _main_ingredient(ingredients)
+        ingredient_profile = _ingredient_profile(ingredients)
 
         if rating.score >= 4:
             liked_cuisines[cuisine] += 1
             for tag in tags:
                 liked_tags[tag.lower()] += 1
-            liked_ingredients[main_ing] += 1
+            if main_ing != "unknown":
+                liked_main_ingredients[main_ing] += 1
+            for token, quantity in ingredient_profile.items():
+                liked_ingredient_profile[token] += quantity
         elif rating.score <= 2:
             for tag in tags:
                 disliked_tags[tag.lower()] += 1
-            disliked_ingredients[main_ing] += 1
+            if main_ing != "unknown":
+                disliked_main_ingredients[main_ing] += 1
+            for token, quantity in ingredient_profile.items():
+                disliked_ingredient_profile[token] += quantity
 
     all_recipes = db.query(Recipe).all()
     candidates: list[PlanCandidate] = []
@@ -172,13 +259,16 @@ def _build_candidates_for_user(db: Session, current_user: User) -> list[PlanCand
         tags = recipe.tags or []
         ingredients = recipe.ingredients or []
         main_ing = _main_ingredient(ingredients)
+        candidate_profile = _ingredient_profile(ingredients)
 
         score = 0.0
         score += float(liked_cuisines.get(cuisine, 0)) * 1.8
         score += float(sum(liked_tags.get(tag.lower(), 0) for tag in tags)) * 0.9
         score -= float(sum(disliked_tags.get(tag.lower(), 0) for tag in tags)) * 1.1
-        score += float(liked_ingredients.get(main_ing, 0)) * 1.2
-        score -= float(disliked_ingredients.get(main_ing, 0)) * 1.5
+        score += float(liked_main_ingredients.get(main_ing, 0)) * 1.0
+        score -= float(disliked_main_ingredients.get(main_ing, 0)) * 1.2
+        score += float(sum(liked_ingredient_profile.get(token, 0.0) * qty for token, qty in candidate_profile.items())) * 0.08
+        score -= float(sum(disliked_ingredient_profile.get(token, 0.0) * qty for token, qty in candidate_profile.items())) * 0.10
 
         if recipe.id in liked_recipe_ids:
             score -= 2.5
@@ -204,7 +294,10 @@ def _build_candidates_for_user(db: Session, current_user: User) -> list[PlanCand
     query_terms: list[str] = []
     query_terms.extend([item for item, _count in liked_cuisines.most_common(3)])
     query_terms.extend([item for item, _count in liked_tags.most_common(4)])
-    query_terms.extend([item for item, _count in liked_ingredients.most_common(4) if item != "unknown"])
+    query_terms.extend([item for item, _count in liked_main_ingredients.most_common(4) if item != "unknown"])
+    query_terms.extend(
+        [item for item, _count in Counter(liked_ingredient_profile).most_common(4) if item != "unknown"]
+    )
     if not query_terms:
         query_terms = ["chicken", "beef", "vegetarian", "pasta", "rice"]
 
@@ -237,13 +330,16 @@ def _build_candidates_for_user(db: Session, current_user: User) -> list[PlanCand
                 if str(ingredient).strip()
             ]
             main_ing = _main_ingredient(ingredients)
+            candidate_profile = _ingredient_profile(ingredients)
 
             score = 0.0
             score += float(liked_cuisines.get(cuisine, 0)) * 1.8
             score += float(sum(liked_tags.get(tag.lower(), 0) for tag in tags)) * 0.9
             score -= float(sum(disliked_tags.get(tag.lower(), 0) for tag in tags)) * 1.1
-            score += float(liked_ingredients.get(main_ing, 0)) * 1.2
-            score -= float(disliked_ingredients.get(main_ing, 0)) * 1.5
+            score += float(liked_main_ingredients.get(main_ing, 0)) * 1.0
+            score -= float(disliked_main_ingredients.get(main_ing, 0)) * 1.2
+            score += float(sum(liked_ingredient_profile.get(token, 0.0) * qty for token, qty in candidate_profile.items())) * 0.08
+            score -= float(sum(disliked_ingredient_profile.get(token, 0.0) * qty for token, qty in candidate_profile.items())) * 0.10
 
             if external_id in liked_external_ids:
                 score -= 2.5

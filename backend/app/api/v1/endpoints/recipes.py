@@ -53,17 +53,21 @@ def _tokenize_feature(value: str) -> list[str]:
 def _local_recipe_feature_set(recipe: Recipe) -> set[str]:
     features: set[str] = set()
     for tag in recipe.tags or []:
-        features.update(_tokenize_feature(tag))
+        features.update(token for token in _tokenize_feature(tag) if not _is_measurement_token(token))
     for ingredient in recipe.ingredients or []:
-        features.update(_tokenize_feature(ingredient))
-    features.update(_tokenize_feature(recipe.cuisine or ""))
+        ingredient_phrase = _normalize_ingredient_phrase(ingredient)
+        if ingredient_phrase:
+            features.add(ingredient_phrase)
+    features.update(token for token in _tokenize_feature(recipe.cuisine or "") if not _is_measurement_token(token))
     return features
 
 
 def _ingredient_tokens(ingredients: list[str]) -> set[str]:
     tokens: set[str] = set()
     for ingredient in ingredients:
-        tokens.update(_tokenize_feature(ingredient))
+        ingredient_phrase = _normalize_ingredient_phrase(ingredient)
+        if ingredient_phrase:
+            tokens.add(ingredient_phrase)
     return tokens
 
 
@@ -91,7 +95,40 @@ _INGREDIENT_STOPWORDS = {
     "sliced",
     "diced",
     "of",
+    "g",
+    "mg",
+    "lbs",
+    "pound",
+    "pounds",
+    "ounce",
+    "ounces",
+    "liter",
+    "liters",
+    "litre",
+    "litres",
+    "clove",
+    "cloves",
+    "pinch",
+    "pinches",
+    "slice",
+    "slices",
+    "piece",
+    "pieces",
+    "can",
+    "cans",
+    "package",
+    "packages",
 }
+
+
+def _is_measurement_token(token: str) -> bool:
+    if not token:
+        return True
+    if token.isdigit():
+        return True
+    if re.match(r"^\d+(?:\.\d+)?(?:g|kg|mg|ml|l|oz|lb|lbs)$", token):
+        return True
+    return token in _INGREDIENT_STOPWORDS
 
 
 def _parse_quantity_prefix(raw_value: str) -> float:
@@ -121,14 +158,31 @@ def _parse_quantity_prefix(raw_value: str) -> float:
     return 1.0
 
 
+def _normalize_ingredient_phrase(raw_value: str) -> str:
+    value = raw_value.strip().lower()
+    if not value:
+        return ""
+
+    # Remove leading quantity (e.g. "1 1/2", "3/4", "250", "2.5") before token filtering.
+    value = re.sub(r"^\s*(?:\d+\s+\d+/\d+|\d+/\d+|\d+(?:\.\d+)?)\s*", "", value)
+
+    words: list[str] = []
+    for token in re.split(r"[^a-z0-9]+", value):
+        if not token or _is_measurement_token(token):
+            continue
+        words.append(token)
+
+    return " ".join(words)
+
+
 def _ingredient_profile(ingredients: list[str]) -> dict[str, float]:
     profile: dict[str, float] = defaultdict(float)
     for raw in ingredients:
         quantity = _parse_quantity_prefix(raw)
-        for token in _tokenize_feature(raw):
-            if token in _INGREDIENT_STOPWORDS:
-                continue
-            profile[token] += quantity
+        ingredient_phrase = _normalize_ingredient_phrase(raw)
+        if not ingredient_phrase:
+            continue
+        profile[ingredient_phrase] += quantity
     return dict(profile)
 
 
@@ -188,10 +242,12 @@ def _calorie_band(calories: int | None) -> str | None:
 def _external_item_feature_set(item: RecipeDiscoverItem) -> set[str]:
     features: set[str] = set()
     for tag in item.tags:
-        features.update(_tokenize_feature(tag))
+        features.update(token for token in _tokenize_feature(tag) if not _is_measurement_token(token))
     for ingredient in item.key_ingredients:
-        features.update(_tokenize_feature(ingredient))
-    features.update(_tokenize_feature(item.cuisine))
+        ingredient_phrase = _normalize_ingredient_phrase(ingredient)
+        if ingredient_phrase:
+            features.add(ingredient_phrase)
+    features.update(token for token in _tokenize_feature(item.cuisine) if not _is_measurement_token(token))
     return features
 
 
@@ -517,10 +573,16 @@ def suggested_recipes_for_user(
         calorie_band = _calorie_band(external_recipe.get("calories"))
         features: set[str] = set()
         for tag in external_recipe.get("tags", []):
-            features.update(_tokenize_feature(tag))
+            features.update(token for token in _tokenize_feature(tag) if not _is_measurement_token(token))
         for ingredient_name in ingredient_names:
-            features.update(_tokenize_feature(ingredient_name))
-        features.update(_tokenize_feature(external_recipe.get("cuisine") or ""))
+            ingredient_phrase = _normalize_ingredient_phrase(ingredient_name)
+            if ingredient_phrase:
+                features.add(ingredient_phrase)
+        features.update(
+            token
+            for token in _tokenize_feature(external_recipe.get("cuisine") or "")
+            if not _is_measurement_token(token)
+        )
 
         if not features:
             continue
