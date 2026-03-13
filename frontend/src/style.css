@@ -483,6 +483,7 @@ pre {
 
 .week-plan-option-head.no-image {
   grid-template-columns: 1fr;
+  align-items: start;
 }
 
 .week-plan-option-thumb {
@@ -507,6 +508,10 @@ pre {
   grid-template-columns: 96px 1fr;
 }
 
+.week-plan-option.is-primary .week-plan-option-head.no-image {
+  grid-template-columns: 1fr;
+}
+
 .week-plan-option.is-primary .week-plan-option-thumb {
   width: 96px;
   height: 96px;
@@ -516,6 +521,10 @@ pre {
 @media (max-width: 720px) {
   .week-plan-option.is-primary .week-plan-option-head {
     grid-template-columns: 72px 1fr;
+  }
+
+  .week-plan-option.is-primary .week-plan-option-head.no-image {
+    grid-template-columns: 1fr;
   }
 
   .week-plan-option.is-primary .week-plan-option-thumb {
@@ -543,17 +552,20 @@ pre {
 
 .week-plan-main.title-only {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   min-height: 52px;
 }
 
 .week-plan-main.title-only a,
 .week-plan-main.title-only span {
-  display: inline-block;
+  display: -webkit-box;
   max-width: 100%;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  text-overflow: initial;
+  white-space: normal;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  line-height: 1.3;
   font-size: 0.92rem;
 }
 

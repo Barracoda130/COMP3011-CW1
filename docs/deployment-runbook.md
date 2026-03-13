@@ -6,7 +6,8 @@ This runbook describes environment setup, migration, optional seed, and startup 
 
 Backend (`backend/.env`):
 
-- `DATABASE_URL` (default: `sqlite:///.../backend/meal_api.db`)
+- `DATABASE_URL` (deployment: PostgreSQL URL, e.g. `postgresql+psycopg://...`)
+- `BACKEND_CORS_ORIGINS` (JSON list or comma-separated origins)
 - `SECRET_KEY` (required in non-dev deployments)
 - `ALGORITHM` (default `HS256`)
 - `ACCESS_TOKEN_EXPIRE_MINUTES` (default `1440`)
@@ -40,7 +41,7 @@ cd backend
 Current setup does not require mandatory seed scripts.
 
 - If you want demo data, create recipes through API/UI after startup.
-- Keep `meal_api.db` backed up before bulk data operations.
+- For PostgreSQL environments, rely on provider backups/snapshots before bulk operations.
 
 ## 5. Start Services
 
@@ -56,8 +57,14 @@ Frontend:
 ```powershell
 cd frontend
 npm.cmd install
-npm.cmd run build
 npm.cmd run dev
+```
+
+Production/static build output:
+
+```powershell
+cd frontend
+npm.cmd run build
 ```
 
 ## 6. Validation Checklist
@@ -70,7 +77,8 @@ npm.cmd run dev
 
 ## 7. Rollback Notes
 
-- SQLite rollback: restore backup copy of `backend/meal_api.db`.
+- PostgreSQL rollback: restore provider snapshot/backup or rollback schema migration.
+- SQLite local rollback: restore backup copy of `backend/meal_api.db`.
 - Migration rollback (if needed):
 
 ```powershell

@@ -4,8 +4,109 @@
 
 - Frontend: Vue 3 SPA (`frontend/src`) with route-level views for discover, suggested, cook, rated, my-recipes, create/edit, and weekly plan.
 - Backend: FastAPI (`backend/app`) with modular routers under `/api/v1`.
-- Persistence: SQLite with SQLAlchemy ORM models and Alembic migrations.
+- Persistence: PostgreSQL (deployment) with SQLAlchemy ORM models and Alembic migrations; SQLite remains available as local fallback.
 - External Source: TheMealDB integration for discovery, cook details, ratings, and weekly-plan candidate generation.
+
+## Database Schema
+
+### Tables
+
+`users`
+
+- `id` (PK)
+- `email` (unique, indexed)
+- `hashed_password`
+- `full_name`
+- `created_at`
+
+`recipes`
+
+- `id` (PK)
+- `owner_id` (FK -> `users.id`, indexed)
+- `title` (indexed)
+- `cuisine` (indexed)
+- `prep_minutes`
+- `calories`
+- `intro`
+- `steps`
+- `image_url`
+- `ingredients` (JSON)
+- `tags` (JSON)
+- `average_rating`
+- `created_at`
+
+`weekly_plans`
+
+- `id` (PK)
+- `user_id` (FK -> `users.id`, indexed)
+- `start_date`
+- `end_date`
+- `status`
+- `created_at`
+
+`weekly_plan_items`
+
+- `id` (PK)
+- `weekly_plan_id` (FK -> `weekly_plans.id`, indexed)
+- `day_index` (indexed)
+- `planned_for`
+- `recipe_source` (`local` or `themealdb`)
+- `recipe_id` (nullable FK -> `recipes.id`)
+- `external_recipe_id` (nullable)
+- `title_snapshot`
+- `is_selected`
+- `notes`
+- `created_at`
+- Unique constraint: `(weekly_plan_id, day_index, recipe_source)`
+
+`recipe_ratings`
+
+- `id` (PK)
+- `user_id` (FK -> `users.id`, indexed)
+- `recipe_id` (FK -> `recipes.id`, indexed)
+- `score`
+- `comment`
+- `created_at`
+- Unique constraint: `(user_id, recipe_id)`
+
+`external_recipe_ratings`
+
+- `id` (PK)
+- `user_id` (FK -> `users.id`, indexed)
+- `external_recipe_id` (indexed)
+- `source`
+- `score`
+- `comment`
+- `created_at`
+- Unique constraint: `(user_id, external_recipe_id)`
+
+`user_suggestion_cache`
+
+- `id` (PK)
+- `user_id` (FK -> `users.id`, indexed, unique)
+- `items_json` (JSON)
+- `is_stale`
+- `generated_at`
+- `updated_at`
+
+### Relationship Summary
+
+- One `user` can own many `recipes`
+- One `user` can create many `recipe_ratings` and `external_recipe_ratings`
+- One `recipe` can have many `recipe_ratings`
+- One `user` has at most one `user_suggestion_cache` row
+- One `user` can have many `weekly_plans`
+- One `weekly_plan` has many `weekly_plan_items`
+
+### Indexes (high level)
+
+- `users`: index on `id`, unique index on `email`
+- `recipes`: indexes on `id`, `owner_id`, `title`, `cuisine`
+- `recipe_ratings`: indexes on `id`, `user_id`, `recipe_id`
+- `external_recipe_ratings`: indexes on `id`, `user_id`, `external_recipe_id`
+- `user_suggestion_cache`: indexes on `id`, `user_id`
+- `weekly_plans`: indexes on `id`, `user_id`
+- `weekly_plan_items`: indexes on `id`, `weekly_plan_id`, `day_index`
 
 ## Request/Response Flow
 
